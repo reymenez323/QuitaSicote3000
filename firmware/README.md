@@ -1,25 +1,29 @@
 # Firmware
 
-Dos proyectos **independientes** (cada uno con su `platformio.ini`, a crear al empezar a programar):
+Tres proyectos PlatformIO independientes:
 
-| Carpeta | MCU | Rol |
+| Carpeta | Placa | Rol |
 |---|---|---|
-| [control/](control/) | Arduino Mega 2560 | Proceso, sensado ambiental, actuadores |
-| [sis/](sis/) | Arduino Nano ([ADR-0002](../docs/decisiones/ADR-0002-mcu-del-sis.md)) | Seguridad |
-| [hmi/](hmi/) | ESP32-32E con pantalla 3.2" ([ADR-0005](../docs/decisiones/ADR-0005-hmi-esp32.md)) | UI y registro; sólo comunicación |
-| [compartido/](compartido/) | — | Contrato entre ambos (cabeceras, constantes, protocolo) |
+| [control/](control/README.md) | Arduino Mega 2560 | Ciclo, sensores, actuadores |
+| [sis/](sis/README.md) | Arduino Nano | Seguridad |
+| [hmi/](hmi/README.md) | ESP32-32E con pantalla 3.2" | Interfaz LVGL; sólo comunicación |
+| [compartido/protocolo/](compartido/protocolo/README.md) | — | Ids, mensajes, CRC: contrato común |
 
-Estructura interna de cada proyecto:
+Estructura de cada proyecto: `src/`, `include/`, `lib/`, `test/`.
 
-```
-src/      Código fuente
-include/  Cabeceras públicas del proyecto
-lib/      Bibliotecas locales (drivers propios)
-test/     Pruebas (nativas en PC con PlatformIO "native" donde sea posible)
-```
+## Reglas
 
-Reglas:
+- `sis/` no incluye código de `control/` ni de `hmi/`; sólo `compartido/protocolo/`.
+- `compartido/` contiene definiciones, no lógica (salvo el CRC).
+- La lógica se separa del hardware para probarla en PC (`pio test -e native`).
+- Cada cambio del SIS repite su [validación](../docs/seguridad-sis.md#validación).
 
-- `sis/` **no** incluye código de `control/`. Sólo puede incluir `compartido/protocolo/`.
-- `compartido/` no contiene lógica, sólo definiciones.
-- El firmware del SIS tiene versión propia; cada cambio requiere repetir la validación de [pruebas-de-validacion-sis.md](../docs/03-seguridad/pruebas-de-validacion-sis.md).
+## Pruebas
+
+| Nivel | Qué | Dónde |
+|---|---|---|
+| Unitarias | Funciones SIF, PID, máquina de estados, parser/CRC del protocolo | PC (`native`) |
+| HMI con simulador | Todas las pantallas con un controlador simulado | ESP32 ([PLAN](hmi/PLAN.md)) |
+| Integración | Enlaces UART, heartbeats, fallas de enlace | Placas en banco |
+| Validación SIS | Inyección de fallas V-01…V-13 | Banco |
+| Perfiles | Las 36 combinaciones calzado × intensidad × duración | Equipo completo |

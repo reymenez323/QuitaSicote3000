@@ -1,5 +1,5 @@
 # Protocolo compartido
 
-Aquí vivirán las cabeceras con: tipos de trama, IDs de mensaje, máscaras de causa de disparo, constantes de tiempo de heartbeat y la función de CRC.
+Cabeceras comunes a los tres firmwares: tipos de trama, ids de mensaje, ids de perfil (calzado, intensidad, duración), códigos de falla, máscaras de causa de disparo, tiempos de heartbeat y CRC16.
 
-Especificación: [docs/02-arquitectura/comunicacion-inter-mcu.md](../../../docs/02-arquitectura/comunicacion-inter-mcu.md)
+Especificación: [docs/comunicacion.md](../../../docs/comunicacion.md)

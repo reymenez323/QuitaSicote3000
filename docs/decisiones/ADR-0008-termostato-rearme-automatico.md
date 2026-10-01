@@ -1,20 +1,24 @@
-# ADR-0008 — Termostato de rearme automático: el SIS lo vigila y enclava
+# ADR-0008 — Termostato de rearme automático: enclavado y bloqueo tras 2 eventos
 
-**Estado:** Aceptada por el usuario (enclavado en EEPROM, bloqueo tras 2 eventos)
+**Estado:** Aceptada (enclavado en EEPROM, bloqueo tras 2 eventos). **Reformulación pendiente** por la ADR-0011 (decisión abierta A-11).
 
 ## Contexto
-El termostato de 80 °C (único, NC, en serie con el PTC) es de **rearme automático**. Si abre y el aire se enfría, vuelve a cerrar y el PTC recibiría energía otra vez. Que haya llegado a 80 °C significa que las capas 1 y 2 fallaron o que hay una condición grave (falla de ventilador, incendio): no es un evento a "reintentar".
+El termostato de 80 °C en serie con el PTC se rearma solo al enfriarse. Llegar a 80 °C indica una falla grave (p. ej. ventilador parado): no debe reintentarse.
 
-## Decisión propuesta
-1. El SIS **lee el estado del termostato** (nodo de 12 V justo después del termostato, con divisor resistivo hacia un pin del Nano, ≈ 18 kΩ / 10 kΩ, más resistencia serie y pull-down; **[VERIFICAR valores]**). Nodo en alto = termostato cerrado; bajo = abierto.
-2. Si lo ve abierto con el PTC ordenado (o simplemente abierto cuando debería estar cerrado): **SIF-08** → disparo **enclavado**; el permiso del PTC permanece abierto aunque el termostato se rearme.
-3. El enclavamiento se guarda en **EEPROM del Nano**, para que desenchufar y volver a enchufar no lo borre.
-4. Salir del enclavamiento: enfriamiento completo, autotest correcto y una confirmación deliberada desde el HMI (que sólo *solicita*; el SIS decide).
-5. Contador de eventos en EEPROM: tras **2 eventos** el equipo queda bloqueado hasta un procedimiento de servicio (secuencia especial) y el HMI recomienda revisar el ventilador del PTC y el montaje.
+## Decisión original
+El SIS leía el estado del termostato y, si lo veía abierto, disparaba con enclavado en EEPROM; al 2.º evento, bloqueo hasta servicio.
+
+## Por qué hay que reformularla
+Sin divisor de resistencias (ADR-0011), el Nano no puede leer un nodo de 12 V: **el termostato no se puede leer**.
+
+## Reformulación propuesta (A-11)
+- Se cuentan como **evento térmico** los disparos que el SIS sí detecta y que corresponden a la situación del termostato:
+  - SIF-01: sobretemperatura en TC3 (montado junto al termostato, actúa antes que él);
+  - SIF-03: subida brusca de TC3;
+  - SIF-08: calentamiento sin efecto (el PTC recibe orden pero TC3 baja: posible termostato abierto).
+- 1.er evento: disparo enclavado, guardado en **EEPROM**; rearme con enfriamiento, autotest y confirmación desde el HMI.
+- 2.º evento: **bloqueo** hasta un procedimiento de servicio.
 
 ## Consecuencias
-- (+) Evita que el termostato cicle el PTC en un ciclo apertura/cierre alrededor de 80 °C.
-- (+) Convierte el evento en una falla visible para el usuario.
-- (−) Una falla persistente en EEPROM puede inutilizar el equipo si el usuario no sabe qué hacer; el mensaje del HMI debe ser claro.
-- (−) Añade un pin y un divisor al Nano (no es un dispositivo nuevo: son dos resistencias).
-- Pendiente de decidir: mientras el termostato está abierto, ¿el SIS fuerza ON el ventilador de circulación? Propuesta: sí, como en cualquier disparo.
+- El HMI necesita pantallas claras para "sobrecalentamiento" y "equipo bloqueado".
+- Pendiente: definir el procedimiento de servicio (A-5).
