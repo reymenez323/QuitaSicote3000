@@ -1,0 +1,11 @@
+# PlatformIO
+.pio/
+.vscode/
+*.pyc
+
+# Sistema
+Thumbs.db
+.DS_Store
+
+# Datos pesados o temporales
+datos/logs/*.tmp
