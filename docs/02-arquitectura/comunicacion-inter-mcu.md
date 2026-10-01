@@ -29,7 +29,7 @@ La comunicación es **informativa**. Nada que viaje por ella puede abrir el perm
 | Tipo | Sentido | Contenido | Periodo |
 |---|---|---|---|
 | `HB_CTRL` | Control → SIS | Contador, estado del ciclo, modo | 10 Hz |
-| `HB_SIS` | SIS → Control | Contador, estado SIS, causa de disparo (bitmask), TC3, puerta, permiso real | 10 Hz |
+| `HB_SIS` | SIS → Control | Contador, estado SIS, causa de disparo (bitmask), TC3, puerta, termostato, permiso real | 10 Hz |
 | `REQ_RESET` | Control → SIS | Solicitud de reinicio tras disparo (el SIS valida) | evento |
 | `EVENTO` | SIS → Control | Disparo, rearme, falla de autotest | evento |
 

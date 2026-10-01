@@ -17,7 +17,7 @@ Si el HMI o la Mega se cuelgan, el usuario no tiene forma inmediata de parar el 
 | M-02 | Pérdida de enlace con el HMI > 10 s [VERIFICAR] → la Mega aborta el ciclo y pasa a enfriamiento | Control |
 | M-03 | Tiempo máximo de ciclo fijo en firmware, no editable por el usuario más allá de un tope | Control + SIS (SIF-07) |
 | M-04 | El SIS sigue dependiendo sólo de sus propias lecturas y de los termostatos | SIS / hardware |
-| M-05 | Inicio de ciclo sólo con puerta cerrada y autotest correcto | Control |
+| M-05 | Inicio de ciclo sólo con puerta cerrada y autotest correcto | Control + SIS (el SIS no concede permiso con la puerta abierta) + HMI (Iniciar deshabilitado) |
 | M-06 | Alimentación mediante **fuente externa certificada** de baja tensión; el dispositivo no tiene tensión de red expuesta | Hardware |
 | M-07 | Tras un corte de energía el ciclo **no se reanuda solo**: vuelve a LISTO | Control |
 | M-08 | Superficies accesibles con límite de temperatura y puerta/rejilla que impidan contacto con el PTC | Mecánica |

@@ -10,7 +10,7 @@ SIS en **Arduino Nano (ATmega328P, 5 V, 16 MHz, 32 KB flash, 2 KB SRAM)**. Contr
 | Criterio | Resultado |
 |---|---|
 | Pines: 1 SPI (MAX6675), 1 UART, 4–6 GPIO | Cumple. SPI en D10–D13, UART en D0/D1, quedan D2–D9 y A0–A5. Nota: A6/A7 son **sólo analógicas**, no usarlas como digitales. |
-| Watchdog independiente | Cumple: el WDT del ATmega328P corre con su oscilador interno de 128 kHz, independiente del cristal. **Riesgo**: los Nano con bootloader antiguo no limpian el WDT tras reset y entran en bucle de reinicio. Usar Optiboot o limpiar `MCUSR`/`wdt_disable()` al inicio, y probarlo. |
+| Watchdog independiente | Cumple: el WDT del ATmega328P corre con su oscilador interno de 128 kHz, independiente del cristal. **Riesgo**: los Nano con bootloader antiguo no limpian el WDT tras reset y entran en bucle de reinicio. El firmware limpia `MCUSR` y llama a `wdt_disable()` al inicio, así funciona con cualquier bootloader (original o clon); se comprueba en las pruebas. |
 | Memoria | 2 KB SRAM alcanza para un lazo de seguridad pequeño. Sin `String`, sin asignación dinámica, sin `SoftwareSerial`. |
 | Toolchain distinta a la del control | **No cumple.** Mega y Nano son AVR de 8 bits con el mismo compilador, avr-libc y core Arduino. Un bug de compilador o de biblioteca común afectaría a ambos. |
 

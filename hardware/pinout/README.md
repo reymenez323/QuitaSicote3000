@@ -19,10 +19,12 @@ Un archivo por nodo, cuando se defina: `control.md` (Mega), `sis.md` (Nano), `hm
 | I2C (SHT31, SGP40) | ✔ | — | — |
 | Salida SSR PTC | ✔ | — | — |
 | Salida SSR ventilador | ✔ | forzado (OR) | — |
+| Salida módulo de relé del ventilador del PTC | ✔ | permiso de apagado (en serie) | — |
+| Sensado de la alimentación del ventilador del PTC (divisor) | — | ✔ | — |
 | Salida permiso PTC | — | ✔ | — |
 | Realimentación del permiso | — | ✔ | — |
-| Limit switch de puerta | ✔ | ✔ | — |
-| Estado de termostatos | opcional | ✔ | — |
+| Limit switch de puerta: contacto NA (1 pin) y NC (1 pin) | ✔ (2 pines) | ✔ (2 pines) | — |
+| Sensado del termostato (divisor 12 V → ≤ 5 V tras el termostato) | — | ✔ (entrada digital) | — |
 | UART Control↔SIS | Serial1 | Serial | — |
 | UART Control↔HMI | Serial2 | — | UART0 |
 | Reinicio manual / buzzer / LED de falla | — | ✔ | — |

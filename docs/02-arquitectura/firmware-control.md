@@ -23,7 +23,7 @@ src/
 ├─ app/          Máquina de estados, orquestación del ciclo
 ├─ control/      PID / histéresis, perfil de ciclo, criterios de fin
 ├─ sensores/     max6675, sht31, sgp40 (+ índice VOC), puerta
-├─ actuadores/   SSR PTC, SSR ventilador (límites de duty y tiempos mín. on/off)
+├─ actuadores/   SSR PTC, SSR ventilador, relé del ventilador del PTC (nunca apagarlo con PTC activo ni caliente)
 ├─ comunicacion/ Enlace con SIS y con HMI (usa firmware/compartido/protocolo)
 └─ config/       Pines y parámetros
 ```

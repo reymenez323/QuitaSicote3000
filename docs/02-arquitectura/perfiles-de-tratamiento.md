@@ -8,7 +8,7 @@ El usuario no ajusta temperaturas, porcentajes ni minutos. En el HMI elige entre
 2. Intensidad: **Suave / Media / Intensa**.
 3. Duración: **Corta / Media / Larga**.
 4. Resumen y confirmación.
-5. Cerrar la puerta e iniciar.
+5. Cerrar la puerta e iniciar. **El botón Iniciar sólo se habilita con la puerta cerrada** (estado informado por la Mega).
 
 ## Reglas
 
@@ -38,4 +38,4 @@ El usuario no ajusta temperaturas, porcentajes ni minutos. En el HMI elige entre
 | Larga | 70 min |
 | **Tope global (constante en Mega y SIS, SIF-07)** | **120 min** |
 
-Son hipótesis iniciales, no resultados. Se validan en los niveles 5 y 6 del plan de pruebas. El número y los nombres de los tipos de calzado están por confirmar.
+Son hipótesis iniciales, no resultados. Se validan en los niveles 5 y 6 del plan de pruebas. El número de tipos de calzado (4) está confirmado por el usuario; los nombres y las temperaturas siguen siendo propuestas.

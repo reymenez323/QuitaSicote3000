@@ -17,5 +17,7 @@ Método: lista de desviaciones tipo HAZOP simplificado. Este documento **no** de
 | P-11 | Uso sin supervisión, con niños o mascotas | Entorno doméstico | Quemadura, contacto con partes calientes | Mecánica (M-08), temperaturas superficiales bajas, indicación de ciclo activo |
 | P-12 | Corte y retorno de energía | Red doméstica | Reinicio inesperado del calentamiento | No reanudar automáticamente (M-07) |
 | P-13 | Fuente o cableado incorrecto del usuario | Mal uso | Sobrecorriente, calor | Fuente certificada, fusible, conectores no intercambiables |
+| P-14 | Termostato de rearme automático cicla el PTC cerca de 80 °C | Ventilador del PTC parado, ducto obstruido | Calentamiento repetido, deterioro, riesgo de incendio | SIF-08 (enclavado en EEPROM), SIF-03, ADR-0008 |
+| P-15 | Ventilador del PTC apagado con el PTC energizado | Error de software, relé o cable | PTC sin flujo, sobrecalentamiento | Contacto NC (reposo = encendido), permiso de apagado del SIS, sensado del nodo, SIF-03, termostato, SIF-08 (ADR-0009) |
 
 Pendiente: valorar severidad y probabilidad, y definir la temperatura de disparo con datos de los materiales reales.

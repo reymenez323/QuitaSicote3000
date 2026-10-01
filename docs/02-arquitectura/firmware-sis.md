@@ -14,9 +14,9 @@ Ubicación: `firmware/sis/`
 
 ## Responsabilidades
 
-1. Leer TC3 (MAX6675 exclusivo), puerta, estado de termostatos y retroalimentación del permiso.
+1. Leer TC3 (MAX6675 exclusivo), puerta, **estado del termostato** (divisor, SIF-08) y retroalimentación del permiso.
 2. Evaluar las funciones de seguridad ([funciones-de-seguridad.md](../03-seguridad/funciones-de-seguridad.md)).
-3. Gobernar el permiso en serie del PTC y el forzado del ventilador.
+3. Gobernar el permiso en serie del PTC y el forzado del ventilador. **Nunca concede el permiso con la puerta abierta**, tampoco antes de iniciar un ciclo.
 4. Reportar estado y causa de disparo al control.
 5. Autodiagnóstico: verificar que el permiso realmente abre (retroalimentación) y que el termopar responde.
 
@@ -43,6 +43,7 @@ ARRANQUE ──autotest OK──► OK ──condición──► DISPARADO ─�
 ```
 
 - En `ARRANQUE` y `DISPARADO` el permiso del PTC está **abierto**.
+- Los disparos graves (SIF-08, y los que el SIS defina) se guardan en **EEPROM** y sobreviven a un corte de energía. Escribir sólo en eventos, no cíclicamente (desgaste).
 - Salir de `DISPARADO` exige: causa desaparecida, tiempo mínimo de enfriamiento y un reinicio explícito (botón físico o confirmación en UI como *solicitud*, que el SIS valida).
 
 ## Elección de MCU

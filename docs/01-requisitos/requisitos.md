@@ -13,6 +13,7 @@ Eliminar o reducir el mal olor del calzado haciendo circular aire caliente y sec
 | RF-03 | El sistema fuerza la circulación de aire con un ventilador dedicado (distinto del ventilador integrado al PTC). | Control |
 | RF-04 | El sistema mide temperatura en 3 puntos (termopares K), humedad (SHT31) y VOC (SGP40). | Sensado |
 | RF-05 | El ciclo termina al cumplirse la duración elegida (Corta/Media/Larga) de tratamiento a temperatura. VOC y humedad se muestran y registran; su uso como criterio de fin anticipado queda por decidir. | Control |
+| RF-10 | **Un ciclo sólo puede iniciarse con la puerta cerrada.** El botón Iniciar se habilita únicamente con la puerta cerrada, la Mega rechaza la solicitud si está abierta, y el SIS no concede permiso al PTC con la puerta abierta. | Control / SIS / UI |
 | RF-09 | El usuario elige tipo de calzado, intensidad (3 opciones) y duración (3 opciones); sin valores numéricos ni porcentajes. Ver [perfiles-de-tratamiento.md](../02-arquitectura/perfiles-de-tratamiento.md). | UI |
 | RF-06 | Al terminar o abortar, el sistema ejecuta un enfriamiento (ventilador sin calor) antes de declarar "listo". | Control |
 | RF-07 | La pantalla muestra estado, temperaturas, humedad, índice VOC, tiempo restante y fallas activas. | UI |

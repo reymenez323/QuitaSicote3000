@@ -38,10 +38,14 @@ flowchart LR
   CTRL -->|PWM/ON-OFF| SSR1[SSR-DC PTC]
   CTRL -->|ON/OFF| SSR2[SSR-DC ventilador recámara]
   SIS -->|PERMISO| INT[Interruptor de permiso en serie]
-  TH[Termostatos NC] --- INT
+  TH[Termostato 80°C NC · rearme automático] --- INT
+  TH -.->|sensado| SIS
   SSR1 --- INT --> PTC[PTC + su ventilador]
   SSR2 --> FAN[Ventilador de circulación]
   SIS -.->|forzar ON| SSR2
+  CTRL -->|ON/OFF| RLY[Módulo de relé 12 V · NC]
+  RLY --> PFAN[Ventilador del PTC]
+  SIS -.->|permiso de apagado| RLY
 ```
 
 Lectura del diagrama: la alimentación del PTC pasa por **tres contactos en serie**: SSR de control, permiso del SIS y termostatos. Basta que uno abra para que el PTC se apague.
@@ -56,7 +60,8 @@ Lectura del diagrama: la alimentación del PTC pasa por **tres contactos en seri
 | Limit switch de puerta | Lee (UI, pausa) | Lee (disparo) |
 | SSR del PTC | Comanda | Puede inhibirlo vía permiso en serie |
 | SSR del ventilador de recámara | Comanda | Puede forzarlo a ON en disparo (enfriamiento) |
-| Termostatos térmicos | — (opcional: lectura de estado) | Lee estado (diagnóstico) |
+| Relé del ventilador del PTC (NC) | Comanda (apagado sólo en frío) | Concede el permiso de apagado y sensa su alimentación |
+| Termostato 80 °C | — | Lee estado y enclava el disparo (SIF-08) |
 | Pantalla / UI | Vía HMI (UART) | No |
 | Decisión de ciclo y setpoints | Sí | No |
 | Decisión de disparo | No | **Sí, autoridad única** |
