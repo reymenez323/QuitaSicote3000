@@ -6,9 +6,9 @@
 |---|---|---|
 | RF-01 | El usuario inicia, pausa, reanuda y cancela un ciclo desde la pantalla táctil. | HMI |
 | RF-02 | El usuario elige tipo de calzado (4 opciones), intensidad (3) y duración (3). Sin valores numéricos ni porcentajes. Ver [perfiles](perfiles-de-tratamiento.md). | HMI / Control |
-| RF-03 | Un ciclo sólo puede iniciarse con la puerta cerrada: el HMI deshabilita Iniciar, la Mega rechaza la solicitud y el SIS no concede permiso al PTC. | Todos |
+| RF-03 | Un ciclo sólo puede iniciarse con la puerta cerrada: el HMI deshabilita Iniciar, el control rechaza la solicitud y el SIS no concede permiso al PTC. | Todos |
 | RF-04 | El control calienta la recámara hasta la temperatura del perfil y la mantiene durante la duración elegida. | Control |
-| RF-05 | El ventilador de circulación y el del PTC funcionan según el ciclo: la Mega los pide y el SIS los maneja con sus propias condiciones de seguridad. | Control / SIS |
+| RF-05 | El control maneja el ventilador de circulación y el del PTC según el ciclo. El SIS puede forzar el de circulación y vetar el apagado del ventilador del PTC. | Control / SIS |
 | RF-06 | Al terminar o cancelar, el sistema enfría (ventilación sin calor) antes de volver a "listo". | Control |
 | RF-07 | La pantalla muestra estado, tiempo restante, temperatura, humedad, VOC y fallas. | HMI |
 | RF-08 | Se registran los datos de cada ciclo (destino por definir: SD del HMI o salida serie). | Control / HMI |
@@ -30,7 +30,7 @@
 |---|---|
 | RD-01 | Operable por una persona no técnica sólo desde la pantalla, con el dedo o un stylus. |
 | RD-02 | Sin botón físico de paro: abrir la puerta detiene el calentamiento. |
-| RD-03 | Si la Mega pierde el enlace con el HMI, aborta el ciclo y enfría. |
+| RD-03 | Si el control pierde el enlace con el HMI, aborta el ciclo y enfría. |
 | RD-04 | Tras un corte de energía el ciclo no se reanuda solo. |
 | RD-05 | Tope de tiempo de ciclo no modificable por el usuario. |
 

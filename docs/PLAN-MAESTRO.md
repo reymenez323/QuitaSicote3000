@@ -1,6 +1,6 @@
 # Plan maestro de implementación — QuitaSicote3000
 
-Versión 2 · 2026-09-30 · Electrónica y firmware de todo el sistema.
+Versión 5 · 2026-09-30 · Electrónica y firmware de todo el sistema.
 
 ---
 
@@ -9,8 +9,21 @@ Versión 2 · 2026-09-30 · Electrónica y firmware de todo el sistema.
 ### 0.1 Propósito
 Este documento es la **referencia principal** para implementar el sistema completo: electrónica, firmware de los tres nodos, pruebas y orden de trabajo. Está escrito para que otra persona u otro agente de IA pueda continuar el proyecto **sin el historial de conversación**.
 
-### 0.2 Etiquetas de estado
-Cada dato o decisión importante lleva una etiqueta. Respétalas:
+### 0.2 Regla de máxima prioridad [CONFIRMADO]
+
+> **El control es el ESP32-S3 y el SIS es el ESP32 Dev Kit. Esta separación se mantiene estrictamente en todo el proyecto** ([ADR-0012](decisiones/ADR-0012-regla-mega-control-nano-sis.md)).
+
+- Todo lo que sea **control** (ciclo, perfiles, regulación, ventiladores, sensores de proceso) corre en el **ESP32-S3**.
+- Todo lo que sea **seguridad** (funciones SIF, permiso del PTC, vetos, forzados, enclavamientos) corre en el **ESP32 Dev Kit**.
+- Si una salida necesita a la vez la orden del control y una condición de seguridad, se combina **por hardware** con **contactos de módulos de relé** (NC en paralelo = AND para apagar; NA en paralelo = OR para encender). **Nunca** se mueve una función de un controlador al otro.
+- El HMI (ESP32-32E) no hace ni control ni seguridad.
+
+**Preferencias de hardware [CONFIRMADO]** ([ADR-0013](decisiones/ADR-0013-solo-modulos-y-dispositivos.md)):
+- Sólo **módulos o dispositivos**: nada de resistencias, condensadores, diodos, transistores ni circuitos integrados sueltos.
+- **Sin** módulos optoacopladores ni convertidores de nivel lógico.
+- **Sin** fusibles ni caja de fusibles.
+
+### 0.3 Etiquetas de estado
 
 | Etiqueta | Significado | ¿Se puede cambiar sin consultar? |
 |---|---|---|
@@ -21,22 +34,22 @@ Cada dato o decisión importante lleva una etiqueta. Respétalas:
 | **[VERIFICAR]** | Dato externo (hoja de datos, placa) aún no comprobado | Sí, al comprobarlo |
 | **[ABIERTO]** | Falta una decisión del usuario | No: preguntar |
 
-### 0.3 Reglas para quien modifique el proyecto
-1. Ante un conflicto entre este plan y otro documento del repo, **no elijas en silencio**: corrige el que esté mal y anótalo en el registro de cambios (§15).
-2. **Nunca** muevas lógica de seguridad al control o al HMI. El SIS no acepta umbrales ni órdenes que relajen la seguridad por la comunicación: **lo que recibe sólo puede restringir**.
-3. El HMI **no decide nada**: muestra lo que envía la Mega y hace solicitudes. Nunca envía temperaturas ni minutos.
-4. **No añadir componentes auxiliares sueltos** (compuertas, transistores, diodos, resistencias, fusibles) [CONFIRMADO]. Toda lógica de combinación de señales se hace por software. Si algo es imposible sin un componente, se plantea como decisión [ABIERTO].
+### 0.4 Reglas para quien modifique el proyecto
+1. La regla y las preferencias de §0.2 están por encima de cualquier otra consideración.
+2. Ante un conflicto entre este plan y otro documento del repo, **no elijas en silencio**: corrige el que esté mal y anótalo en el registro de cambios (§15).
+3. El SIS no acepta umbrales ni órdenes que relajen la seguridad por la comunicación: **lo que recibe sólo puede restringir**.
+4. El HMI **no decide nada**: muestra lo que envía el control y hace solicitudes. Nunca envía temperaturas ni minutos.
 5. Los nombres de constantes de la §12 son los que deben usarse en el código.
 6. Documentación y comentarios en **español**; identificadores de código en **inglés**.
 7. Al terminar una fase, actualiza su estado en la §10 y el registro de cambios.
 
-### 0.4 Documentos relacionados
+### 0.5 Documentos relacionados
 | Documento | Contenido |
 |---|---|
-| [pinout/](pinout/README.md) | **Pinout de cada controlador** (Mega, Nano, ESP32): única fuente de números de pin |
+| [pinout/](pinout/README.md) | **Pinout de cada controlador**: única fuente de números de pin |
 | [requisitos.md](requisitos.md) | Requisitos RF/RS/RD |
 | [arquitectura.md](arquitectura.md) | Resumen de nodos y responsabilidades |
-| [maquina-de-estados.md](maquina-de-estados.md) | Ciclo de la Mega (resumen) |
+| [maquina-de-estados.md](maquina-de-estados.md) | Ciclo del control (resumen) |
 | [perfiles-de-tratamiento.md](perfiles-de-tratamiento.md) | Calzado × intensidad × duración |
 | [comunicacion.md](comunicacion.md) | Enlaces (resumen; el detalle de bytes está en §6) |
 | [seguridad-sis.md](seguridad-sis.md) | SIF y pruebas V-xx (resumen) |
@@ -53,34 +66,37 @@ Equipo **doméstico** [CONFIRMADO] que elimina el mal olor del calzado haciendo 
 
 | Nodo | Placa | Función |
 |---|---|---|
-| **Control** | Arduino Mega 2560 | Ciclo de tratamiento, sensores de proceso, SSR del PTC |
-| **SIS** | Arduino Nano (ATmega328P) | Seguridad independiente: relé de permiso del PTC y los dos ventiladores de la recámara |
+| **Control** | **ESP32-S3** (se asume ESP32-S3-DevKitC-1 [VERIFICAR, A-13]) | Ciclo de tratamiento, sensores de proceso, SSR del PTC y ventiladores |
+| **SIS** | **ESP32 Dev Kit** (ESP32-WROOM-32; se asume DevKitC/DOIT [VERIFICAR, A-13]) | Seguridad independiente: relé de permiso del PTC, relés de veto y forzado de ventiladores, enclavamientos |
 | **HMI** | ESP32-32E con pantalla 3.2" (E32R32P) | Interfaz táctil; **sólo comunicación**, sin entradas ni salidas de proceso |
+
+Los tres trabajan a **3,3 V**: se conectan entre sí directamente.
 
 ### 1.2 Capas de protección
 ```
-Capa 3  Termostato 80 °C en serie con el PTC              → hardware puro
-Capa 2  SIS (Nano): su propio termopar y relé de permiso  → software mínimo e independiente
-Capa 1  Control (Mega): límites de software sobre el SSR  → lógica de proceso
+Capa 3  Termostato bimetálico 80 °C en serie con el PTC   → hardware puro
+Capa 2  SIS (ESP32 Dev Kit): su termopar y relé de permiso → software mínimo e independiente
+Capa 1  Control (ESP32-S3): límites de proceso sobre el SSR → lógica de proceso
 ```
-Cada capa puede apagar el PTC **por sí sola**: TH1 abre el circuito, el SIS abre RL1, la Mega apaga SSR1.
+Cada capa puede apagar el PTC **por sí sola**: TH1 abre el circuito, el SIS abre RL1, el control apaga SSR1.
 
 ### 1.3 Datos confirmados por el usuario (procedencia)
+- **Control = ESP32-S3, SIS = ESP32 Dev Kit, estrictamente** (máxima prioridad). Antes eran Arduino Mega y Nano: se cambiaron.
 - Producto doméstico; se controla **sólo desde la pantalla**; **no hay botón físico de paro**.
-- Control = Mega; SIS = Nano (que sea original o clon es irrelevante); la pantalla ESP32-32E sólo se comunica.
-- 3 termopares tipo K con 3 MAX6675; SHT31 (T/HR); SGP40 (VOC). SHT31 y SGP40 toleran 5 V.
+- La pantalla ESP32-32E sólo se comunica.
+- 3 termopares tipo K con 3 MAX6675; SHT31 (T/HR); SGP40 (VOC).
 - 2 SSR de DC: uno para el PTC y otro para el ventilador de circulación.
 - PTC de **100 W a 12 V** con ventilador propio; ese ventilador tiene alimentación separada y lo conmuta un **módulo de relé de 12 V** (configurable; se eligió **NC + disparo por nivel alto**).
 - **Otro módulo de relé en serie con el PTC** como permiso del SIS.
 - Ventilador de la cámara de circuitos conectado **directo a 12 V**.
 - Todos los ventiladores son de **12 V y 2 cables** (sin tacómetro).
-- **Un solo termostato de 80 °C, de rearme automático.** "No hay ninguna situación donde deba alcanzarse esa temperatura a menos que haya fuego."
-- **No se añaden componentes auxiliares pequeños** (ni compuertas, transistores, diodos, resistencias o fusibles), ni un fusible térmico.
+- **Un solo termostato bimetálico de 2 cables, 80 °C, rearme automático.** "No hay ninguna situación donde deba alcanzarse esa temperatura a menos que haya fuego."
+- **Sólo módulos o dispositivos**; **sin** optoacopladores, **sin** convertidores de nivel, **sin** fusibles ni caja de fusibles, sin fusible térmico.
 - **Dos reguladores de 5 V** (uno para el control y otro para el SIS).
 - Limit switch de puerta: se usan **ambos contactos, NA y NC**.
 - Fuente externa de **12 V / 20 A**. Corriente de arranque del PTC **desconocida**.
 - Inicio de ciclo **sólo con la puerta cerrada**. Pausa máxima **5 min**.
-- Enclavado en EEPROM y **bloqueo tras 2 eventos** (se decidió para el termostato; ver §7.7 por qué hay que reformularlo).
+- Enclavado persistente y **bloqueo tras 2 eventos** del termostato (reformulación pendiente, A-11).
 - **4 tipos de calzado**, intensidad y duración con **3 opciones** cada una, sin valores ni porcentajes visibles.
 - Pantalla en **horizontal**.
 
@@ -93,7 +109,7 @@ Cada capa puede apagar el PTC **por sí sola**: TH1 abre el circuito, el SIS abr
 | Documentación de arquitectura | Hecha (este plan + `docs/`) |
 | Código | **No existe**. Carpetas `firmware/*/src` vacías |
 | Plan del HMI | Escrito ([PLAN.md](../firmware/hmi/PLAN.md)), sin empezar |
-| Hardware | El usuario tiene los componentes de §1.3. Falta el 2.º módulo de relé (RL1), apto para la corriente del PTC |
+| Hardware | Faltan, además de lo de §1.3: ESP32-S3, ESP32 Dev Kit, RL1 (módulo de relé de 30 A), RM1 (módulo de 2 relés), REG_A, REG_B |
 | Ensayos | Ninguno |
 
 ---
@@ -107,8 +123,8 @@ Detalle en [requisitos.md](requisitos.md). Los que más condicionan el diseño:
 - **RS-03** El PTC nunca queda energizado sin flujo de aire.
 - **RS-04** Pérdida de alimentación, de comunicación o de sensor ⇒ calentador apagado.
 - **RS-05** Un fallo del control no puede desactivar al SIS.
-- **RF-03** Inicio sólo con la puerta cerrada (HMI, Mega y SIS lo comprueban).
-- **RD-03** Si la Mega pierde al HMI más de 10 s durante un ciclo, cancela y enfría.
+- **RF-03** Inicio sólo con la puerta cerrada (HMI, control y SIS lo comprueban).
+- **RD-03** Si el control pierde al HMI más de 10 s durante un ciclo, cancela y enfría.
 - **RD-04** Tras un corte de energía, el ciclo no se reanuda.
 
 ---
@@ -119,26 +135,24 @@ Detalle en [requisitos.md](requisitos.md). Los que más condicionan el diseño:
 
 | ID | Decisión | Estado |
 |---|---|---|
+| — | **Control = ESP32-S3, SIS = ESP32 Dev Kit, estrictamente** | [CONFIRMADO] ([ADR-0012](decisiones/ADR-0012-regla-mega-control-nano-sis.md), [ADR-0002](decisiones/ADR-0002-mcu-del-sis.md)) |
 | A-1 | El SIS corta el PTC con un **módulo de relé (RL1) en serie** | [DECIDIDO] ([ADR-0010](decisiones/ADR-0010-permiso-ptc-modulo-rele.md)) |
-| A-2 | **Sin componentes auxiliares pequeños** | [CONFIRMADO] ([ADR-0011](decisiones/ADR-0011-sin-componentes-auxiliares.md)) |
+| A-2 | **Sólo módulos o dispositivos**; sin optoacopladores ni convertidores de nivel | [CONFIRMADO] ([ADR-0013](decisiones/ADR-0013-solo-modulos-y-dispositivos.md)) |
 | A-3 | **Dos reguladores de 5 V** independientes | [CONFIRMADO] |
-
-Consecuencias de A-2 que ya están aplicadas en este plan:
-- **El Nano maneja directamente** RL1 (permiso del PTC), RL2 (ventilador del PTC) y SSR2 (ventilador de circulación). La Mega sólo **solicita** los ventiladores por la comunicación. Las combinaciones AND/OR se hacen por software en el SIS.
-- **El SIS no puede leer nodos de 12 V** (haría falta un divisor de resistencias). No ve directamente el termostato, el estado real de RL1 ni si el ventilador del PTC tiene tensión. Las funciones de seguridad se basan en TC3, la puerta y el estado que informa la Mega (§7.5).
-- Sin resistencias en serie en la puerta, ni pull-downs: se usan los pull-ups internos y el comportamiento por defecto de los módulos [VERIFICAR en F3].
+| A-9 | Enlaces directos a 3,3 V entre los tres ESP32 | [DECIDIDO] (consecuencia del cambio de controladores) |
+| A-10 | **Sin fusibles ni caja de fusibles**: la única protección contra cortocircuitos es la de la propia fuente | [CONFIRMADO]; riesgo aceptado (§13) |
 
 ### 4.2 Abiertas
 
 | ID | Pregunta | Opciones | Recomendación | Bloquea |
 |---|---|---|---|---|
-| **A-9** | Nivel lógico del enlace Mega → ESP32: la Mega emite 5 V y el ESP32 **no tolera** más de 3,6 V | **1)** Módulo convertidor de nivel lógico (placa lista de 4 canales). **2)** Emular salida en drenador abierto por software en la Mega (sin hardware, más complejo y lento). **3)** Conectar 5 V directo: fuera de especificación, puede dañar el ESP32 | **1** | F6 |
-| **A-10** | Protección contra cortocircuitos sin fusibles | **1)** Aceptar sólo la protección de la fuente (≈ 20–25 A). **2)** Permitir al menos un fusible general y uno en las ramas de cable fino | **2**: un cortocircuito en un cable fino (ventiladores, reguladores) se calienta mucho antes de que salte la protección de una fuente de 20 A | F3 |
-| **A-11** | El termostato no se puede leer (§7.7). ¿Se aplica el enclavado en EEPROM con bloqueo tras 2 eventos a los **eventos térmicos que el SIS sí detecta** (sobretemperatura, subida brusca, calentamiento sin efecto)? | Sí / no | Sí | F4 |
-| **A-4** | Si el SIS deja de recibir al control con el PTC permitido, ¿disparo enclavado o sólo retirar el permiso? | — | Disparo enclavado | F4 |
-| **A-5** | Procedimiento de servicio tras el bloqueo | Ver §7.9 | Comando por USB de la Mega + secuencia de puerta | F4 |
+| **A-11** | **Dónde cablear el termostato bimetálico** (TH1, 2 cables) | **T1**: en serie con los 12 V del PTC (barrera independiente de todo, pero el SIS no puede leerlo). **T2**: en serie con la señal de 3,3 V del SIS hacia RL1, leído por un pin del SIS (se puede leer y enclavar, pero si RL1 se suelda el termostato ya no corta). Detalle en [ADR-0008](decisiones/ADR-0008-termostato-rearme-automatico.md) | **T1**, con el bloqueo tras 2 eventos aplicado a los eventos térmicos que el SIS detecta (SIF-01, SIF-03, SIF-08) | F3, F4 |
+| **A-12** | ¿Recuperar la lectura de los nodos de 12 V con un **módulo sensor de voltaje** (0–25 V, salida analógica)? Permitiría leer el termostato, el contacto de RL1, un SSR1 en corto y la tensión del ventilador del PTC | Sí / no | Opcional; recomendable si se acepta ese tipo de módulo | F3 |
+| **A-13** | Modelos exactos de las placas ESP32-S3 y ESP32 Dev Kit | — | Necesario para fijar los pines definitivos | F0 |
+| **A-4** | Si el SIS deja de recibir al control con el permiso concedido, ¿disparo enclavado o sólo retirar el permiso? | — | Disparo enclavado | F4 |
+| **A-5** | Procedimiento de servicio tras el bloqueo | Ver §7.9 | Comando por USB del control + secuencia de puerta | F4 |
 | **A-6** | ¿VOC/HR como criterio de fin anticipado? | Sí / no / sólo informativo | Sólo informativo hasta tener datos | F9 |
-| **A-7** | Registro de ciclos | CSV por USB de la Mega / SD del HMI | CSV por USB desde el principio; SD después | F5 |
+| **A-7** | Registro de ciclos | CSV por USB del control / SD del HMI | CSV por USB desde el principio; SD después | F5 |
 | **A-8** | Nombres de los 4 calzados | — | Cuero, Deportivo, Bota, Sintético | F1 |
 
 ---
@@ -150,27 +164,26 @@ Consecuencias de A-2 que ya están aplicadas en este plan:
 | Ref. | Componente | Estado |
 |---|---|---|
 | PSU | Fuente externa 12 V / 20 A | [CONFIRMADO] |
-| J1 | Conector de entrada de 12 V con polaridad (p. ej. XT60) | [PROPUESTA] (es un conector, no un componente auxiliar) |
-| TH1 | Termostato 80 °C NC, rearme automático | [CONFIRMADO] |
-| **RL1** | **Módulo de relé de 12 V, permiso del PTC**: contacto **NA**, disparo por nivel **ALTO**, contacto apto para **≥ 30 A en DC** | Tipo [DECIDIDO]; especificación [PROPUESTA] |
-| SSR1 | SSR DC-DC (MOSFET) para el PTC | [CONFIRMADO]; especificación [PROPUESTA] |
-| SSR2 | SSR DC-DC para el ventilador de circulación | [CONFIRMADO] |
-| RL2 | Módulo de relé de 12 V del ventilador del PTC: contacto **NC**, disparo **ALTO** | [CONFIRMADO] |
+| J1 | Conector de entrada de 12 V con polaridad (p. ej. XT60): protege contra polaridad inversa | [PROPUESTA] |
+| TH1 | Termostato bimetálico 80 °C, 2 cables, NC, rearme automático | [CONFIRMADO]; cableado [ABIERTO A-11] |
+| **RL1** | **Módulo de relé de 12 V, permiso del PTC**: contacto **NA**, disparo **ALTO** compatible con 3,3 V, contacto **≥ 30 A en DC**. Lo maneja el SIS | Tipo [DECIDIDO]; especificación [PROPUESTA] |
+| SSR1 | SSR DC-DC (MOSFET) para el PTC. Lo maneja el control | [CONFIRMADO]; especificación [PROPUESTA] |
+| SSR2 | SSR DC-DC para el ventilador de circulación. Lo maneja el control | [CONFIRMADO] |
+| RL2 | Módulo de relé de 12 V del ventilador del PTC: contacto **NC**, disparo **ALTO**. Lo maneja el control | [CONFIRMADO] |
+| **RM1** | **Módulo de 2 relés** (disparo **ALTO** compatible con 3,3 V) para el SIS: **RL3** = veto del apagado de FAN_P (contacto **NC**, en paralelo con RL2); **RL4** = forzado de FAN_C (contacto **NA**, en paralelo con SSR2) | [PROPUESTA] |
 | PTC | Calefactor PTC 100 W / 12 V | [CONFIRMADO] |
 | FAN_P | Ventilador del PTC (12 V, 2 cables) | [CONFIRMADO] |
 | FAN_C | Ventilador de circulación (12 V, 2 cables) | [CONFIRMADO] |
 | FAN_B | Ventilador de la cámara de circuitos (12 V, 2 cables) | [CONFIRMADO] |
-| REG_A | Regulador 12 → 5 V, ≥ 2 A, conmutado (buck): lado control | [CONFIRMADO]; especificación [PROPUESTA] |
-| REG_B | Regulador 12 → 5 V, ≥ 1 A, conmutado: lado SIS | [CONFIRMADO]; especificación [PROPUESTA] |
+| REG_A | Módulo regulador conmutado (buck) 12 → 5 V, ≥ 2 A: lado control (ESP32-S3 + HMI) | [CONFIRMADO]; especificación [PROPUESTA] |
+| REG_B | Módulo regulador conmutado 12 → 5 V, ≥ 1 A: lado SIS | [CONFIRMADO]; especificación [PROPUESTA] |
 | SW1 | Limit switch de puerta SPDT (COM, NA, NC) | [CONFIRMADO] |
-| TC1–TC3 + M1–M3 | Termopar K + módulo MAX6675 | [CONFIRMADO] |
-| S1 | Módulo SHT31 (I2C 0x44) | [CONFIRMADO] |
-| S2 | Módulo SGP40 (I2C 0x59) | [CONFIRMADO] |
-| MCU_C | Arduino Mega 2560 | [CONFIRMADO] |
-| MCU_S | Arduino Nano | [CONFIRMADO] |
+| TC1–TC3 + M1–M3 | Termopar K + módulo MAX6675 (alimentado a 3,3 V) | [CONFIRMADO] |
+| S1 | Módulo SHT31 (I2C 0x44), alimentado a 3,3 V | [CONFIRMADO] |
+| S2 | Módulo SGP40 (I2C 0x59), alimentado a 3,3 V | [CONFIRMADO] |
+| MCU_C | ESP32-S3 (control) | [CONFIRMADO]; modelo [ABIERTO A-13] |
+| MCU_S | ESP32 Dev Kit (SIS) | [CONFIRMADO]; modelo [ABIERTO A-13] |
 | HMI | Placa ESP32-32E 3.2" | [CONFIRMADO] |
-| LS1 | Módulo convertidor de nivel lógico 5 V ↔ 3,3 V | [ABIERTO A-9] |
-| F* | Fusibles | [ABIERTO A-10]; por ahora **no** se incluyen |
 
 ### 5.1 Presupuesto de corriente (12 V)
 
@@ -179,121 +192,146 @@ Consecuencias de A-2 que ya están aplicadas en este plan:
 | PTC en régimen | ≈ 8,3 A | Calculado (100 W / 12 V) |
 | PTC en el arranque | Mayor: un PTC frío tiene menos resistencia | [POR MEDIR] F7 |
 | FAN_P, FAN_C, FAN_B | ≈ 0,1–0,5 A cada uno | [POR MEDIR] |
-| Bobinas de RL1 y RL2 | ≈ 0,07–0,2 A cada una | [VERIFICAR] modelo |
-| Lógica a 5 V (Mega, Nano, HMI con retroiluminación, sensores) | ≈ 0,6 A a 5 V ⇒ ≈ 0,3 A a 12 V | Estimado |
-| **Total** | **≈ 9,5–10 A en régimen** | La fuente de 20 A tiene margen |
+| Bobinas de RL1, RL2, RL3, RL4 | ≈ 0,07–0,2 A cada una | [VERIFICAR] modelo |
+| Lógica a 5 V (ESP32-S3, ESP32, HMI con retroiluminación, sensores) | ≈ 0,7 A a 5 V ⇒ ≈ 0,35 A a 12 V | Estimado (radios apagadas) |
+| **Total** | **≈ 10 A en régimen** | La fuente de 20 A tiene margen |
 
 ### 5.2 Distribución de potencia
 
+Con la opción **T1** de A-11 (termostato en la línea del PTC):
+
 ```
-PSU 12 V ─ J1 ─┬── TH1 ── RL1 (COM → NA) ── PTC(+)  PTC(−) ── SSR1 salida(+)  SSR1 salida(−) ── GND
+PSU 12 V ─ J1 ─┬─ TH1 ── RL1 (COM→NA) ── PTC(+)   PTC(−) ── SSR1 salida(+)  SSR1 salida(−) ── GND
                │
-               ├── RL2 (COM → NC) ── FAN_P(+)        FAN_P(−) ── GND
-               ├── FAN_C(+)        FAN_C(−) ── SSR2 salida(+)  SSR2 salida(−) ── GND
-               ├── FAN_B(+)        FAN_B(−) ── GND                          (siempre encendido)
-               ├── VCC de los módulos RL1 y RL2 (bobinas de 12 V)
+               ├─ RL2 (COM→NC) ──┐
+               ├─ RL3 (COM→NC) ──┴── FAN_P(+)     FAN_P(−) ── GND        (NC en paralelo = AND para apagar)
+               ├─ FAN_C(+)   FAN_C(−) ─┬─ SSR2 salida(+)  SSR2 salida(−) ── GND
+               │                       └─ RL4 (COM→NA) ── GND            (NA en paralelo = OR para encender)
+               ├─ FAN_B(+)   FAN_B(−) ── GND                             (siempre encendido)
+               ├─ VCC de RL1, RL2 y RM1 (bobinas de 12 V)
                │
-               ├── REG_A ── 5V_A ──► Mega (pin 5V), HMI (USB-C), S1, S2, M1, M2, LS1 lado 5 V
-               └── REG_B ── 5V_B ──► Nano (pin 5V), M3
+               ├─ REG_A ── 5V_A ──► ESP32-S3 (pin 5V), HMI (USB-C)
+               └─ REG_B ── 5V_B ──► ESP32 Dev Kit (pin 5V/VIN)
+
+3V3 del ESP32-S3 ──► M1, M2 (MAX6675), S1 (SHT31), S2 (SGP40)
+3V3 del ESP32 Dev Kit ──► M3 (MAX6675)
 ```
+
+Con la opción **T2**, TH1 sale de la línea del PTC (12 V directo a RL1) y pasa a la señal: `pin de permiso del SIS → TH1 → RL1.IN`, con un segundo pin del SIS leyendo el lado de RL1.IN.
 
 Notas:
 - **SSR1 y SSR2 en el lado bajo** (entre la carga y GND) [PROPUESTA], la configuración habitual de los SSR DC-DC [VERIFICAR con el modelo].
 - **FAN_P no pasa por TH1, RL1 ni SSR1**: sigue funcionando cuando la rama del PTC está cortada.
-- **REG_A y REG_B alimentan el pin 5V** de cada placa, saltándose sus reguladores lineales (que a 12 V se calentarían).
-- **Programación por USB**: con el regulador conectado al pin 5V, **no conectes también el USB** (el 5 V del USB y el del regulador quedarían unidos). En banco, alimenta por USB y deja el regulador desconectado; en el equipo integrado, al revés.
-- **Placa HMI**: por USB-C desde 5V_A, o por el VCC de su conector serie si es entrada de 5 V [VERIFICAR].
-- **Módulos de relé**: VCC a 12 V, GND común, IN desde el Nano. Comprobar en F3 que una salida de 5 V del Nano los activa con disparo ALTO [VERIFICAR] y que con la entrada **al aire** quedan desactivados.
+- **Reguladores al pin 5V** de cada placa; el regulador de 3,3 V de la propia placa alimenta el ESP32 y los sensores.
+- **Programación por USB**: con el regulador conectado al pin 5V, comprobar si la placa tiene un diodo entre el USB y el pin 5V [VERIFICAR]. Si no lo tiene, **no conectar el USB a la vez** que el regulador.
+- **Sensores a 3,3 V**: alimentarlos desde el pin 3V3 de su placa, para que sus señales sean de 3,3 V. **Ninguna entrada de un ESP32 tolera 5 V.**
+- **Módulos de relé y SSR manejados con 3,3 V**: deben activarse de forma fiable con 3,3 V en la entrada (disparo ALTO) [VERIFICAR en F3]. **No usar módulos con disparo por nivel bajo** alimentados a 5 V: con 3,3 V en la entrada podrían quedar a medio activar.
+- **Sin pull-downs** (ADR-0013): cada módulo de relé y cada SSR debe quedar **desactivado con la entrada al aire**, porque así queda mientras su controlador arranca. Se comprueba en F3; un módulo que no lo cumpla se cambia.
+- **Sin fusibles** [CONFIRMADO]: el cable principal y la rama del PTC deben soportar la corriente a la que actúa la protección de la fuente (≈ 20–25 A): **12 AWG (4 mm²)**. Los cables finos de ventiladores y módulos no quedan protegidos ante un cortocircuito (riesgo aceptado, §13).
 
 ### 5.3 Rama del PTC
 
-- **Orden**: PSU → TH1 → RL1 (contacto NA) → PTC → SSR1 → GND. Cualquiera de los tres que abra apaga el PTC.
-- **RL1** [DECIDIDO]: módulo de relé con disparo ALTO; energizado = permitido. Si el Nano se reinicia o se apaga, su pin queda al aire y RL1 se abre. **El contacto debe soportar la corriente del PTC en DC**: los módulos comunes de 10 A (relé tipo SRD) **no sirven**; usar uno de **30 A** (relé tipo SLA) y comprobar su especificación en DC [VERIFICAR].
-- **SSR1**: DC-DC de salida MOSFET, especificado para **≥ 40 A** si es un modelo genérico (los "25DD" de bajo costo suelen soportar mucho menos de lo indicado), con disipador [PROPUESTA]. Entrada de 3–32 V DC, manejada a 5 V por la Mega.
-- **Conmutación lenta** del SSR1: ventana proporcional de 2 s con mínimo 100 ms encendido/apagado (§8.6). RL1 **no** conmuta en cada ventana: se cierra al empezar a calentar y se abre al terminar, para no desgastar sus contactos.
-- **Cableado**: ≥ 14 AWG (2,5 mm²) en toda la rama; terminales y conectores de ≥ 15 A continuos; retorno propio a la estrella de tierra. Si A-10 queda en "sin fusibles", el cableado principal y el de la rama del PTC deben soportar la corriente máxima de la fuente: **12 AWG (4 mm²)**.
+- **Orden (T1)**: PSU → TH1 → RL1 (contacto NA) → PTC → SSR1 → GND. Cualquiera de los tres que abra apaga el PTC.
+- **RL1** [DECIDIDO]: módulo de relé con disparo ALTO manejado por el SIS; energizado = permitido. **El contacto debe soportar la corriente del PTC en DC**: los módulos comunes de 10 A (relé tipo SRD) **no sirven**; usar uno de **30 A** (relé tipo SLA) y comprobar su especificación en DC [VERIFICAR]. RL1 se cierra al empezar a calentar y se abre al terminar.
+- **TH1 (T1)**: el contacto bimetálico debe soportar ≈ 8,3 A en DC [VERIFICAR: los datos suelen darse para CA].
+- **SSR1**: DC-DC de salida MOSFET, especificado para **≥ 40 A** si es un modelo genérico (los "25DD" de bajo costo suelen soportar mucho menos de lo indicado), con disipador [PROPUESTA]. Entrada de 3–32 V DC: comprobar que activa con 3,3 V [VERIFICAR].
+- **Conmutación lenta** del SSR1: ventana proporcional de 2 s con mínimo 100 ms encendido/apagado (§8.6).
+- **Cableado**: 12 AWG (4 mm²); terminales y conectores de ≥ 25 A; retorno propio a la estrella de tierra.
 
 ### 5.4 Ventiladores
 
-| Ventilador | Lo maneja | Reposo / falla | Supervisión |
-|---|---|---|---|
-| FAN_P (PTC) | **Nano** (D6) → RL2, contacto **NC**, disparo **ALTO** | Pin al aire o relé sin energizar ⇒ **encendido** | Ninguna eléctrica; subida de TC3 (SIF-03) |
-| FAN_C (circulación) | **Nano** (D5) → SSR2 | Pin al aire ⇒ apagado | Ninguna |
-| FAN_B (cámara de circuitos) | Nadie: directo a 12 V | Siempre encendido | Ninguna |
+| Ventilador | Lo maneja el control (ESP32-S3) | Intervención del SIS (ESP32 Dev Kit) | Combinación | Reposo / falla |
+|---|---|---|---|---|
+| FAN_P (PTC) | RL2, **ALTO = pedir apagado** | RL3, **ALTO = permitir apagado** | Contactos **NC en paralelo**: se apaga sólo si RL2 **y** RL3 están energizados | Cualquier controlador sin alimentación o arrancando ⇒ su relé sin energizar ⇒ **encendido** |
+| FAN_C (circulación) | SSR2, ALTO = encender | RL4, **ALTO = forzar encendido** | Contacto NA de RL4 **en paralelo** con la salida de SSR2 | Sin señales ⇒ apagado |
+| FAN_B (cámara de circuitos) | — | — | — | Siempre encendido (directo a 12 V) |
 
-- La Mega pide `fan_c_on_request` y `fan_p_off_request` en `HB_CTRL`. El SIS **enciende FAN_C** si lo pide la Mega **o** si lo exige la seguridad, y **apaga FAN_P sólo** si lo pide la Mega **y** se cumplen sus condiciones de seguridad (§7.5). Una solicitud de la Mega nunca puede dejar un ventilador apagado cuando hace falta.
-- Si el SIS se apaga: RL2 se desenergiza ⇒ FAN_P encendido; SSR2 se apaga ⇒ FAN_C apagado. El PTC no tiene permiso (RL1 abierto).
+- Si cae REG_A (control apagado) **o** REG_B (SIS apagado), el ventilador del PTC sigue girando.
+- No hay sensado de tensión ni de giro en ningún ventilador (2 cables, sin módulos de lectura de 12 V).
 - **FAN_B** debe tomar aire del exterior, no de la recámara (caliente, húmeda y con vapores), con rejilla.
 
-### 5.5 Sensores
+### 5.5 Lo que el SIS no puede medir (ADR-0013)
+
+Sin módulos de lectura de 12 V, el SIS **no** ve: el termostato (con T1), el contacto real de RL1, un SSR1 en corto ni la tensión del ventilador del PTC. Se compensa con:
+- **TC3** montado junto a TH1: SIF-01 (sobretemperatura), SIF-03 (subida brusca) y SIF-08 (calentamiento sin efecto).
+- **El control**: ante sobretemperatura pasa a FALLA y retira `heat_request`, con lo que el SIS abre RL1.
+- Opción A-12 (módulo sensor de voltaje) o T2 (termostato leído por el SIS) para recuperar parte de esas lecturas.
+
+### 5.6 Sensores
 
 | Sensor | Bus / dirección | Nodo | Montaje |
 |---|---|---|---|
-| TC1 + M1 | SPI | Mega | Aire de la recámara, cerca del calzado. Variable de control |
-| TC2 + M2 | SPI | Mega | Aire a la salida del PTC (unos cm aguas abajo). Límite y diagnóstico de flujo |
-| TC3 + M3 | SPI | Nano | Aire en el punto más caliente en caso de falla, **sin tocar las aletas del PTC**. Cerca de TH1 [POR MEDIR en F7] |
-| S1 SHT31 | I2C 0x44 | Mega | Recámara, fuera del chorro directo del PTC |
-| S2 SGP40 | I2C 0x59 | Mega | Trayecto de retorno o salida del aire, la zona **más fresca**: su rango de operación tiene un máximo cercano a 50 °C [VERIFICAR hoja de datos] |
-| SW1 | Digital | Mega y Nano | COM a GND; NA a un pin de cada MCU; NC a otro pin de cada MCU |
+| TC1 + M1 | SPI | Control | Aire de la recámara, cerca del calzado. Variable de control |
+| TC2 + M2 | SPI | Control | Aire a la salida del PTC (unos cm aguas abajo). Límite y diagnóstico de flujo |
+| TC3 + M3 | SPI | SIS | Aire en el punto más caliente en caso de falla, **junto a TH1, sin tocar las aletas del PTC** [POR MEDIR en F7] |
+| S1 SHT31 | I2C 0x44 | Control | Recámara, fuera del chorro directo del PTC |
+| S2 SGP40 | I2C 0x59 | Control | Trayecto de retorno o salida del aire, la zona **más fresca**: su rango de operación tiene un máximo cercano a 50 °C [VERIFICAR hoja de datos] |
+| SW1 | Digital | Control y SIS | COM a GND; NA y NC directos a ambos controladores, con pull-up interno |
 
 **MAX6675** (comportamiento para el firmware):
+- Alimentar a **3,3 V** (rango 3,0–5,5 V) para que su salida SO sea de 3,3 V.
 - Sólo termopar K. Resolución 0,25 °C. Conversión ≈ 220 ms: leer como mucho cada 250 ms por módulo; bajar CS aborta la conversión en curso.
 - SPI modo 0, ≤ 4 MHz (usar 1 MHz). Se leen 16 bits: D15 = 0; D14–D3 = temperatura × 4 (12 bits); **D2 = 1 ⇒ termopar abierto**; D1 = 0; D0 indeterminado.
 - Usar termopares de **unión aislada**: una unión que toque metal unido a GND (carcasa del PTC) altera la lectura.
 - Cable de extensión tipo K, trenzado, lejos de los cables de potencia. Módulos lejos del calor.
 
-**Puerta (SW1)**: COM → GND; NA → un pin de la Mega y uno del Nano; NC → otro pin de cada uno. **Conexión directa** con pull-up interno en ambos MCU. Puerta cerrada = actuador presionado ⇒ NA cerrado (BAJO) y NC abierto (ALTO). Tabla de interpretación en §7.4.
-Si uno de los dos MCU está sin alimentación, sus diodos de protección arrastran las líneas a BAJO y el otro lee "NA BAJO + NC BAJO" = inválido = puerta abierta: falla segura.
+**SHT31 / SGP40**: alimentar a 3,3 V; si el módulo trae resistencias de pull-up a su VIN, quedan a 3,3 V [VERIFICAR con los módulos].
 
-### 5.6 Enlaces serie
+**Puerta (SW1)**: puerta cerrada = actuador presionado ⇒ NA cerrado (BAJO) y NC abierto (ALTO). Tabla en §7.4. Si uno de los dos controladores está sin alimentación, sus diodos de protección pueden arrastrar las líneas a BAJO; el otro lee "NA BAJO + NC BAJO" = inválido = puerta abierta: falla segura.
 
-| Enlace | Conexión | Niveles |
-|---|---|---|
-| Mega ↔ Nano | Mega TX1 → Nano D0 **directo**; Nano D1 → Mega RX1 | 5 V / 5 V. El Nano tiene 1 kΩ entre su conversor USB y D0: la Mega debe manejar D0 directo para imponerse. Para programar el Nano, desconectar este enlace |
-| Mega ↔ HMI | Mega TX2 → **LS1** → ESP32 IO32 (RX de UART2); ESP32 IO25 (TX de UART2) → LS1 → Mega RX2 | 5 V ↔ 3,3 V vía LS1 [ABIERTO A-9]. UART2 del ESP32 reasignado al conector I2C de la placa: UART0/USB queda para depurar |
+### 5.7 Enlaces serie
 
-Velocidad: **57600 baudios 8N1 en ambos enlaces** [PROPUESTA] (a 16 MHz, 57600 tiene −0,8 % de error; 115200 tiene +2,1 %).
-GND común entre los tres nodos (obligatorio para UART).
+Los tres controladores trabajan a 3,3 V: **conexión directa**, sin convertidores.
 
-### 5.7 Asignación de pines
+| Enlace | Conexión |
+|---|---|
+| Control ↔ SIS | UART1 del ESP32-S3 ↔ UART2 del ESP32 Dev Kit (TX ↔ RX cruzados) |
+| Control ↔ HMI | UART2 del ESP32-S3 ↔ UART2 del HMI, reasignado a IO25 (TX) / IO32 (RX) en el conector I2C de la placa |
 
-Cada controlador tiene su propio documento, con todos los pines, a qué terminal de qué componente va cada uno, polaridad, estado durante el reinicio y constantes del firmware:
+Números de pin exactos: [pinout/](pinout/README.md). Velocidad: **115200 baudios 8N1** en ambos enlaces. GND común entre los tres nodos (obligatorio).
+Depuración: USB de cada placa (en el ESP32-S3, el USB nativo; en el ESP32 Dev Kit y el HMI, UART0 por su conversor USB).
+
+### 5.8 Asignación de pines
+
+Cada controlador tiene su propio documento, con todos los pines, a qué terminal de qué componente va cada uno, la polaridad, el estado durante el arranque y las constantes del firmware:
 
 | Controlador | Documento |
 |---|---|
-| Arduino Mega 2560 (control) | [pinout/mega.md](pinout/mega.md) |
-| Arduino Nano (SIS) | [pinout/nano.md](pinout/nano.md) |
+| ESP32-S3 (control) | [pinout/control-esp32s3.md](pinout/control-esp32s3.md) |
+| ESP32 Dev Kit (SIS) | [pinout/sis-esp32.md](pinout/sis-esp32.md) |
 | ESP32-32E (HMI) | [pinout/esp32-hmi.md](pinout/esp32-hmi.md) |
 | Cables entre controladores y polaridades | [pinout/README.md](pinout/README.md) |
 
-Esos documentos son la **única fuente** de números de pin.
+Esos documentos son la **única fuente** de números de pin. Se fijarán definitivamente cuando se confirmen los modelos de placa (A-13).
 
-### 5.8 Tierra, cableado y ruido
+### 5.9 Tierra, cableado y ruido
 - **Tierra en estrella** en el negativo de la fuente. Retornos separados para: rama del PTC, ventiladores, REG_A, REG_B. Los 8 A del PTC no comparten cable con la lógica.
 - Cables de potencia y de señal separados; los de termopar, trenzados.
-- Los módulos de regulador y de relé ya traen sus condensadores y diodos: no se añade nada.
+- Los módulos ya traen sus condensadores y diodos: no se añade nada suelto.
 - Pasacables en la recámara; nada de cable de señal pegado al PTC.
+- Sin fusibles: cables finos cortos, sujetos y lejos de material inflamable.
 
-### 5.9 Comportamiento ante fallas de hardware
+### 5.10 Comportamiento ante fallas de hardware
 
 | Falla | Efecto inmediato | Cómo se detecta | Reacción |
 |---|---|---|---|
-| SSR1 en cortocircuito | PTC encendido sin orden | La Mega ve TC1 > setpoint + 5 °C; el SIS ve TC3 subir (SIF-01/03) | La Mega pasa a FALLA y retira `heat_request` ⇒ el SIS abre RL1. Si la Mega no reacciona, SIF-01 abre RL1 |
-| RL1 con contacto soldado | El SIS no puede cortar | **No se detecta** (no hay realimentación) | SSR1 sigue controlando; TH1 como última barrera. Revisar RL1 en la validación periódica (F8) |
-| RL1 no cierra | No calienta | Timeout de precalentamiento (Mega) | FALLA(5) |
-| TH1 abierto | PTC sin corriente | **Indirecto**: calentamiento sin efecto (SIF-08 inferida) | Disparo enclavado del SIS (§7.7) |
-| RL2 trabado energizado (FAN_P apagado) | PTC sin flujo | Subida rápida de TC3 (SIF-03), TC2 > máx. (Mega) | Disparo |
-| Motor de FAN_P o FAN_C trabado | Sin flujo | Igual que arriba; timeout de precalentamiento | Disparo o FALLA |
+| SSR1 en cortocircuito | PTC encendido sin orden | El control ve TC1 > setpoint + 5 °C; el SIS ve subir TC3 | El control pasa a FALLA y retira `heat_request` ⇒ el SIS abre RL1. Si no, SIF-01 abre RL1 |
+| RL1 con contacto soldado | El SIS no puede cortar | **No se detecta** | SSR1 sigue controlando; TH1 (T1) como última barrera. Revisión periódica (F8) |
+| RL1 no cierra | No calienta | Timeout de precalentamiento (control) | FALLA(5) |
+| TH1 abierto (T1) | PTC sin corriente | Indirecto: SIF-08 (calentamiento sin efecto) | Disparo enclavado del SIS |
+| RL2/RL3 o motor de FAN_P | PTC sin flujo | Subida rápida de TC3 (SIF-03), TC2 > máx. (control) | Disparo o FALLA; TH1 en última instancia |
+| RL4 no cierra | El SIS no puede forzar FAN_C | No se detecta | FAN_P sigue siendo la protección principal |
+| FAN_C parado | Recámara sin circulación | Timeout de precalentamiento, TC2 alto | FALLA |
 | TC3 abierto o congelado | SIS ciego | Bit D2, rango, lectura congelada | SIF-04 |
-| TC1/TC2 abiertos | Control ciego | Bit D2, rango | Falla clase A en la Mega |
+| TC1/TC2 abiertos | Control ciego | Bit D2, rango | Falla clase A en el control |
 | Cable de puerta cortado | — | Combinación NA/NC inválida | Se trata como puerta abierta |
-| Cae REG_A | Mega y HMI apagados; SSR1 sin señal | El SIS deja de recibir `HB_CTRL` | El SIS retira el permiso (RL1), mantiene FAN_P y fuerza FAN_C si está caliente |
-| Cae REG_B | Nano apagado: RL1 abierto, FAN_P encendido, FAN_C apagado | La Mega deja de recibir `HB_SIS` | La Mega apaga SSR1 y pasa a FALLA(7) |
-| Se cuelga el Nano | — | WDT (250 ms) | Reinicio ⇒ ARRANQUE ⇒ RL1 abierto |
-| Se cuelga la Mega | — | WDT (1 s) y `HB_CTRL` | Reinicio ⇒ AUTOTEST; el SIS retira el permiso |
-| Se cuelga el HMI | Sin interfaz | La Mega no recibe `HMI_HB` > 10 s | Cancela el ciclo y enfría |
+| Cae REG_A | Control y HMI apagados; SSR1, SSR2 y RL2 sin señal | El SIS deja de recibir `HB_CTRL` | El SIS retira el permiso y fuerza FAN_C con RL4; FAN_P sigue |
+| Cae REG_B | SIS apagado: RL1 abierto; RL3 y RL4 sin señal | El control deja de recibir `HB_SIS` | El control apaga SSR1 y pasa a FALLA(7); FAN_P sigue; FAN_C lo sigue manejando el control |
+| Se cuelga el SIS | — | Task Watchdog (1 s) | Reinicio ⇒ ARRANQUE ⇒ RL1 abierto |
+| Se cuelga el control | — | Task Watchdog y `HB_CTRL` | Reinicio ⇒ AUTOTEST; el SIS retira el permiso |
+| Se cuelga el HMI | Sin interfaz | El control no recibe `HMI_HB` > 10 s | Cancela el ciclo y enfría |
 | Cae la fuente de 12 V | Todo apagado | — | Al volver: AUTOTEST → LISTO, sin reanudar |
-| EEPROM del SIS corrupta | — | CRC | Se trata como disparo enclavado que requiere rearme [PROPUESTA] |
+| Datos persistentes del SIS corruptos | — | CRC | Se trata como disparo enclavado que requiere rearme [PROPUESTA] |
 
 ---
 
@@ -301,9 +339,8 @@ Esos documentos son la **única fuente** de números de pin.
 
 ### 6.1 Herramientas y estructura
 
-- **PlatformIO**, un proyecto por nodo, con versiones de plataforma **fijadas**.
-- Framework Arduino en los tres.
-- C++ compatible con **C++11** en todo lo compartido (el compilador AVR); sin excepciones ni RTTI; sin STL en AVR.
+- **PlatformIO**, framework **Arduino-ESP32** en los tres, con versión de plataforma **fijada**.
+- Código compartido en C++17; sin excepciones ni RTTI en el SIS.
 
 ```
 firmware/
@@ -314,9 +351,9 @@ firmware/
 │        ├─ qs_ids.h          enums compartidos (estados, fallas, perfiles, bits)
 │        ├─ qs_protocol.h     tipos de mensaje, estructuras, tamaños
 │        └─ qs_protocol.cpp   CRC16, codificación, parser con resincronización
-├─ control/                   platformio.ini, src/, lib/, test/
-├─ sis/                       platformio.ini, src/, lib/, test/
-└─ hmi/                       platformio.ini, include/lv_conf.h, src/
+├─ control/                   ESP32-S3: platformio.ini, src/, lib/, test/
+├─ sis/                       ESP32 Dev Kit: platformio.ini, src/, lib/, test/
+└─ hmi/                       ESP32-32E: platformio.ini, include/lv_conf.h, src/
 ```
 
 - Cada `platformio.ini` incluye `lib_extra_dirs = ../compartido`.
@@ -324,8 +361,8 @@ firmware/
 
 | Proyecto | Entornos |
 |---|---|
-| control | `megaatmega2560`, `native` |
-| sis | `nanoatmega328new` (Optiboot); si la carga falla, `nanoatmega328` (bootloader antiguo); `native` |
+| control | `esp32-s3-devkitc-1` (ajustar al modelo, A-13), `native` |
+| sis | `esp32dev`, `native` |
 | hmi | `esp32dev` |
 
 **CI [PROPUESTA]**: `.github/workflows/ci.yml` que compila los tres proyectos y ejecuta los tests `native` en cada push.
@@ -340,7 +377,7 @@ firmware/
 | Tiempos | `uint32_t` ms internamente; `uint16_t` segundos en el protocolo | |
 | Valor inválido | `INT16_MIN` (0x8000) / `UINT16_MAX` (0xFFFF) | |
 
-El SIS **no usa `float`**. La Mega puede usarlo en el PID y en el algoritmo de VOC.
+El SIS usa **aritmética entera**. El control puede usar `float` en el PID y en el algoritmo de VOC.
 
 ### 6.3 Trama
 
@@ -356,21 +393,21 @@ El SIS **no usa `float`**. La Mega puede usarlo en el PID y en el algoritmo de V
 - **CRC-16/CCITT-FALSE**: polinomio 0x1021, valor inicial 0xFFFF, sin reflexión, XOR final 0. Se calcula sobre los offsets 1 … 3+LEN (LEN, TYPE, SEQ y payload). Vector de prueba: `"123456789"` → **0x29B1**.
 - Trama máxima: 38 bytes.
 - **Parser**: máquina de estados byte a byte (esperar SOF → LEN → TYPE → SEQ → payload → CRC). Si LEN > 32 o el CRC falla, se descarta y se busca el siguiente `0xAA` **a partir del byte siguiente al SOF descartado**. Contadores de errores de CRC y de longitud.
-- Sin relleno de bytes (byte stuffing): la resincronización la dan SOF + LEN + CRC.
+- Sin relleno de bytes: la resincronización la dan SOF + LEN + CRC.
 
 ### 6.4 Mensajes
 
-**Mega ↔ Nano** (57600)
+**Control ↔ SIS** (115200)
 
 | TYPE | Nombre | Sentido | Periodo | Payload |
 |---|---|---|---|---|
-| 0x01 | `HB_CTRL` | Mega → Nano | 100 ms | `u8 proto_ver`, `u8 cycle_state`, `u8 ctrl_flags`, `u8 reservado` |
-| 0x02 | `HB_SIS` | Nano → Mega | 100 ms | ver abajo (9 bytes) |
-| 0x03 | `REQ_RESET` | Mega → Nano | evento | `u8 magic = 0x5A`, `u16 trip_mask_ack` (debe coincidir con el `trip_mask` vigente) |
-| 0x04 | `EVENT` | Nano → Mega | evento | `u8 event`, `u16 trip_mask`, `u8 detalle` |
-| 0x05 | `REQ_SERVICE` | Mega → Nano | evento | `u8 magic1 = 0xC3`, `u8 magic2 = 0x3C`, `u8 op` (1 = desbloquear) |
+| 0x01 | `HB_CTRL` | Control → SIS | 100 ms | `u8 proto_ver`, `u8 cycle_state`, `u8 ctrl_flags`, `u8 reservado` |
+| 0x02 | `HB_SIS` | SIS → Control | 100 ms | ver abajo (9 bytes) |
+| 0x03 | `REQ_RESET` | Control → SIS | evento | `u8 magic = 0x5A`, `u16 trip_mask_ack` (debe coincidir con el `trip_mask` vigente) |
+| 0x04 | `EVENT` | SIS → Control | evento | `u8 event`, `u16 trip_mask`, `u8 detalle` |
+| 0x05 | `REQ_SERVICE` | Control → SIS | evento | `u8 magic1 = 0xC3`, `u8 magic2 = 0x3C`, `u8 op` (1 = desbloquear) |
 
-`ctrl_flags` (HB_CTRL): b0 `heat_request` (la Mega está en un estado de calentamiento), b1 `fan_p_off_request`, b2 `fan_c_on_request`, b3 `ssr1_cmd` (valor actual de la salida SSR1).
+`ctrl_flags` (HB_CTRL, **informativo**): b0 `heat_request` (el control está en un estado de calentamiento), b1 `fan_p_off_cmd` (salida a RL2), b2 `fan_c_cmd` (salida a SSR2), b3 `ssr1_cmd` (salida a SSR1).
 
 `HB_SIS` (9 bytes):
 
@@ -378,28 +415,28 @@ El SIS **no usa `float`**. La Mega puede usarlo en el PID y en el algoritmo de V
 |---|---|---|
 | 0 | u8 | `proto_ver` |
 | 1 | u8 | `sis_state`: 0 ARRANQUE, 1 OK, 2 DISPARADO, 3 BLOQUEADO |
-| 2 | u16 | `trip_mask`: b0–b7 = SIF-01…SIF-08 (b4 sin uso); b11 EEPROM inválida; b15 enclavado persistente |
+| 2 | u16 | `trip_mask`: b0–b7 = SIF-01…SIF-08 (b4 sin uso); b11 datos persistentes inválidos; b15 enclavado persistente |
 | 4 | i16 | `tc3_q2` |
-| 6 | u8 | `io_flags`: b0 puerta cerrada, b1 puerta inválida, b2 permiso del PTC (RL1 ordenado), b3 FAN_P encendido (RL2 sin energizar), b4 FAN_C encendido |
-| 7 | u8 | `thermal_events` (contador en EEPROM, saturado) |
+| 6 | u8 | `io_flags`: b0 puerta cerrada, b1 puerta inválida, b2 permiso del PTC (RL1), b3 apagado de FAN_P permitido (RL3), b4 FAN_C forzado (RL4), b5 termostato cerrado (sólo con T2 o A-12) |
+| 7 | u8 | `thermal_events` (contador persistente, saturado) |
 | 8 | u8 | reservado |
 
 `EVENT.event`: 1 DISPARO, 2 REARME_OK, 3 REARME_RECHAZADO, 4 AUTOTEST_FALLIDO, 5 BLOQUEO, 6 DESBLOQUEO_SERVICIO.
 
-**Mega ↔ HMI** (57600)
+**Control ↔ HMI** (115200)
 
 | TYPE | Nombre | Sentido | Periodo | Payload |
 |---|---|---|---|---|
-| 0x10 | `HMI_HB` | HMI → Mega | 500 ms | `u8 proto_ver`, `u8 screen_id` |
-| 0x11 | `REQ_START` | HMI → Mega | evento | `u8 shoe_id`, `u8 intensity_id`, `u8 duration_id` |
-| 0x12 | `REQ_PAUSE` | HMI → Mega | evento | — |
-| 0x13 | `REQ_RESUME` | HMI → Mega | evento | — |
-| 0x14 | `REQ_CANCEL` | HMI → Mega | evento | — |
-| 0x15 | `REQ_ACK` | HMI → Mega | evento | `u8 fault_code` (0 = aceptar "Completo") |
-| 0x16 | `REQ_REARM` | HMI → Mega | evento | — (la Mega lo traduce a `REQ_RESET`) |
-| 0x20 | `STATUS` | Mega → HMI | 200 ms | ver abajo (28 bytes) |
-| 0x21 | `RESP_START` | Mega → HMI | evento | `u8 result`: 0 OK, 1 PUERTA_ABIERTA, 2 NO_LISTO, 3 ID_INVALIDO, 4 FALLA_ACTIVA |
-| 0x22 | `LOG` | Mega → HMI | — | Reservado para una fase posterior (registro en SD) |
+| 0x10 | `HMI_HB` | HMI → Control | 500 ms | `u8 proto_ver`, `u8 screen_id` |
+| 0x11 | `REQ_START` | HMI → Control | evento | `u8 shoe_id`, `u8 intensity_id`, `u8 duration_id` |
+| 0x12 | `REQ_PAUSE` | HMI → Control | evento | — |
+| 0x13 | `REQ_RESUME` | HMI → Control | evento | — |
+| 0x14 | `REQ_CANCEL` | HMI → Control | evento | — |
+| 0x15 | `REQ_ACK` | HMI → Control | evento | `u8 fault_code` (0 = aceptar "Completo") |
+| 0x16 | `REQ_REARM` | HMI → Control | evento | — (el control lo traduce a `REQ_RESET`) |
+| 0x20 | `STATUS` | Control → HMI | 200 ms | ver abajo (28 bytes) |
+| 0x21 | `RESP_START` | Control → HMI | evento | `u8 result`: 0 OK, 1 PUERTA_ABIERTA, 2 NO_LISTO, 3 ID_INVALIDO, 4 FALLA_ACTIVA |
+| 0x22 | `LOG` | Control → HMI | — | Reservado para una fase posterior (registro en SD) |
 
 `STATUS` (28 bytes):
 
@@ -455,15 +492,17 @@ Perfiles: `shoe_id` 0 Cuero, 1 Deportivo, 2 Bota, 3 Sintético · `intensity_id`
 
 ---
 
-## 7. Firmware del SIS (Arduino Nano)
+## 7. Firmware del SIS (ESP32 Dev Kit)
 
 ### 7.1 Principios
-- Lazo cíclico de **10 ms** con `millis()`.
-- **Watchdog de 250 ms**: al arrancar, `MCUSR = 0; wdt_disable();` y luego `wdt_enable(WDTO_250MS)`; `wdt_reset()` una vez por iteración.
-- Sin bibliotecas de terceros; MAX6675 por SPI del hardware; UART con `Serial`.
-- Sin `String`, sin `malloc`, sin `float`.
+- Sólo funciones de seguridad (§0.2).
+- **Wi-Fi y Bluetooth apagados** desde el arranque.
+- Un único lazo cíclico de **10 ms** (en `loop()`), sin tareas propias adicionales.
+- **Task Watchdog** suscrito a la tarea del lazo, con 1 s de tiempo; detector de caída de tensión (*brownout*) activo.
+- Sin bibliotecas de terceros; MAX6675 por SPI del hardware; UART2 con `HardwareSerial`.
+- Sin asignación dinámica después del arranque; sin `String`.
 - Umbrales en `src/config/sis_params.h` como `constexpr`. **Ninguno se recibe por la comunicación.**
-- **La comunicación sólo puede restringir**: un dato de la Mega puede retirar un permiso, provocar un disparo o pedir encender un ventilador; nunca concede un permiso ni apaga un ventilador si las condiciones propias del SIS no lo permiten.
+- **La comunicación sólo puede restringir**: un dato del control puede retirar un permiso o provocar un disparo; nunca concede nada.
 
 ### 7.2 Módulos
 ```
@@ -474,12 +513,12 @@ sis/
 │  ├─ trend.h/.cpp         pendiente de TC3 y "calentamiento sin efecto"
 │  ├─ sif.h/.cpp           evaluación de las SIF y de las salidas
 │  ├─ sis_fsm.h/.cpp       ARRANQUE / OK / DISPARADO / BLOQUEADO
-│  └─ persist.h/.cpp       formato de EEPROM + CRC (con interfaz de almacenamiento simulable)
+│  └─ persist.h/.cpp       formato persistente + CRC (con interfaz de almacenamiento simulable)
 └─ src/
-   ├─ main.cpp             lazo, WDT, planificación
-   ├─ hw_io.cpp            puerta y salidas (RL1, RL2, SSR2)
+   ├─ main.cpp             lazo, watchdog, radios apagadas
+   ├─ hw_io.cpp            puerta y salidas (RL1, RL3, RL4)
    ├─ hw_max6675.cpp       SPI
-   ├─ hw_eeprom.cpp        implementación sobre <EEPROM.h>
+   ├─ hw_store.cpp         implementación sobre NVS (Preferences)
    ├─ link.cpp             HB_SIS, recepción de HB_CTRL / REQ_*
    └─ config/sis_params.h, sis_pins.h
 ```
@@ -488,8 +527,8 @@ sis/
 
 | Periodo | Tarea |
 |---|---|
-| 10 ms | Leer la puerta, procesar bytes del UART, evaluar las SIF, actualizar salidas, `wdt_reset()` |
-| 100 ms | Enviar `HB_SIS`; registrar `ssr1_cmd` recibido para la estadística de SIF-08 |
+| 10 ms | Leer la puerta, procesar bytes del UART, evaluar las SIF, actualizar salidas, alimentar el watchdog |
+| 100 ms | Enviar `HB_SIS`; registrar `ssr1_cmd` para la estadística de SIF-08 |
 | 250 ms | Leer TC3; actualizar la ventana de pendiente |
 
 Tiempo de respuesta esperado puerta → RL1 abierto: antirrebote (30 ms) + un ciclo (10 ms) + liberación del relé (≈ 10 ms) ≈ **50 ms** (requisito < 200 ms).
@@ -502,7 +541,7 @@ Tiempo de respuesta esperado puerta → RL1 abierto: antirrebote (30 ms) + un ci
 |---|---|---|
 | BAJO | ALTO | CERRADA |
 | ALTO | BAJO | ABIERTA |
-| BAJO | BAJO | INVÁLIDA (cortocircuito, switch dañado, otro MCU sin alimentación) |
+| BAJO | BAJO | INVÁLIDA (cortocircuito, switch dañado, otro controlador sin alimentación) |
 | ALTO | ALTO | INVÁLIDA (cable o común cortado) |
 
 INVÁLIDA se trata como ABIERTA y además se informa.
@@ -512,71 +551,66 @@ INVÁLIDA se trata como ABIERTA y además se informa.
 ### 7.5 Funciones de seguridad (pseudocódigo)
 
 ```
-door_ok     = (door == CERRADA)
-hb_ok       = (ahora - ultimo_HB_CTRL) <= HB_CTRL_TIMEOUT_MS
-permit      = valor actual de la salida RL1 (lo que el SIS ordena)
+door_ok  = (door == CERRADA)
+hb_ok    = (ahora - ultimo_HB_CTRL) <= HB_CTRL_TIMEOUT_MS
+permit   = valor actual de la salida a RL1
 
-SIF-01  tc3_valid && tc3 >= T_SIS_MAX                                → disparo, evento térmico
-SIF-02  !door_ok                                                     → inhibir (no enclava)
-SIF-03  permit && (tc3 - tc3_hace_10s) >= SIF03_SLOPE_Q2_10S         → disparo, evento térmico [umbral POR MEDIR]
-SIF-04  !tc3_valid                                                   → disparo
-SIF-05  (retirada: no hay realimentación eléctrica, ADR-0011)
-SIF-06  !hb_ok && permit                                             → disparo [ABIERTO A-4]
-SIF-07  permit continuo > SIF07_MAX_HEAT_MIN                         → disparo
+SIF-01  tc3_valid && tc3 >= T_SIS_MAX                               → disparo, evento térmico
+SIF-02  !door_ok                                                    → inhibir (no enclava)
+SIF-03  permit && (tc3 - tc3_hace_10s) >= SIF03_SLOPE_Q2_10S        → disparo, evento térmico [POR MEDIR]
+SIF-04  !tc3_valid                                                  → disparo
+SIF-05  (retirada: no hay realimentación eléctrica, ADR-0013)
+SIF-06  !hb_ok && permit                                            → disparo [ABIERTO A-4]
+SIF-07  permit continuo > SIF07_MAX_HEAT_MIN                        → disparo
         (el contador se reinicia sólo tras SIF07_COOL_OFF_MIN con el permiso retirado)
-SIF-08  "Calentamiento sin efecto" (posible termostato abierto):
-        permit && ssr1_cmd == 1 en ≥ SIF08_DUTY_PCT % de los HB de los últimos SIF08_WINDOW_S
-        && tc3 bajó ≥ SIF08_DROP_Q2 en esa ventana                   → disparo, evento térmico [POR MEDIR]
+SIF-08  T1: "calentamiento sin efecto" (posible termostato abierto):
+          permit && ssr1_cmd == 1 en >= SIF08_DUTY_PCT % de los HB de los últimos SIF08_WINDOW_S
+          && tc3 bajó >= SIF08_DROP_Q2 en esa ventana                → disparo, evento térmico [POR MEDIR]
+        T2: termostato leído abierto con el permiso ordenado        → disparo, evento térmico
 ```
 
-Salidas:
+Salidas (todas las decide el SIS con sus propias entradas):
 ```
-RL1 permiso (D4, ALTO = permitido)
+RL1 permiso (ALTO = permitido)
    = (estado == OK) && door_ok && !disparo && hb_ok
      && heat_request(HB_CTRL) && tc3_valid && tc3 < T_SIS_MAX
 
-FAN_C (D5, ALTO = encendido)
-   = fan_c_on_request(HB_CTRL)
-     || permit || disparo || (estado != OK)
-     || (tc3_valid && tc3 >= T_FRIO) || !tc3_valid
-
-FAN_P apagado (D6, ALTO = apagar)
-   = fan_p_off_request(HB_CTRL)
-     && (estado == OK) && !permit && !disparo
+RL3 permiso de apagado de FAN_P (ALTO = se permite; NC en paralelo con RL2 del control)
+   = (estado == OK) && !permit && !disparo
      && permiso retirado desde hace >= FAN_P_OFF_HOLD_S
      && tc3_valid && tc3 < T_FRIO
+
+RL4 forzar FAN_C (ALTO = forzar; NA en paralelo con SSR2 del control)
+   = permit || disparo || (estado != OK) || !hb_ok || !tc3_valid || tc3 >= T_FRIO
 ```
 
-Uso de los datos de la Mega: `heat_request` sólo puede **quitar** el permiso; `fan_c_on_request` sólo puede **encender**; `fan_p_off_request` sólo cuenta si las condiciones propias del SIS lo permiten; `ssr1_cmd` sólo puede **provocar** un disparo (SIF-08).
+Uso de los datos del control: `heat_request` sólo puede **quitar** el permiso; `ssr1_cmd` sólo puede **provocar** un disparo (SIF-08).
 
 ### 7.6 Estados del SIS
 
 | Estado | RL1 | Entra cuando | Sale cuando |
 |---|---|---|---|
-| ARRANQUE | Abierto | Encendido o reinicio | Autotest correcto ⇒ OK (o DISPARADO/BLOQUEADO según la EEPROM) |
+| ARRANQUE | Abierto | Encendido o reinicio | Autotest correcto ⇒ OK (o DISPARADO/BLOQUEADO según los datos persistentes) |
 | OK | Según §7.5 | Autotest o rearme correcto | Cualquier disparo ⇒ DISPARADO |
 | DISPARADO | Abierto | Disparo | `REQ_RESET` válido ⇒ OK |
-| BLOQUEADO | Abierto | 2.º evento térmico [A-11] | Procedimiento de servicio (§7.9) |
+| BLOQUEADO | Abierto | 2.º evento térmico | Procedimiento de servicio (§7.9) |
 
 **Autotest del SIS** (ARRANQUE, < 2 s):
-1. EEPROM: magic y CRC correctos; si no, b11 y estado DISPARADO.
+1. Datos persistentes: magic y CRC correctos; si no, b11 y estado DISPARADO.
 2. TC3 válido.
 3. Puerta en una combinación válida (cerrada o abierta).
 
 **Rearme** (`REQ_RESET` con `magic = 0x5A` y `trip_mask_ack == trip_mask`): se acepta sólo si la causa desapareció, `tc3 < T_SIS_RESET`, la puerta es válida y el estado no es BLOQUEADO. Responde `EVENT` REARME_OK o REARME_RECHAZADO.
 
-### 7.7 Termostato, eventos térmicos y EEPROM
+### 7.7 Eventos térmicos y persistencia
 
-La decisión original ([ADR-0008](decisiones/ADR-0008-termostato-rearme-automatico.md)) era que el SIS **leyera el termostato** y lo enclavara. Sin divisor de resistencias (A-2), un pin de 5 V no puede leer un nodo de 12 V. Propuesta para conservar la intención [ABIERTO A-11]:
+- **Evento térmico**: disparo por SIF-01, SIF-03 o SIF-08 (con T1); con T2, también el termostato leído abierto.
+- 1.er evento: disparo **enclavado y guardado**; rearme según §7.6.
+- 2.º evento: **BLOQUEADO** hasta el procedimiento de servicio [DECIDIDO, ADR-0008; aplicación a eventos térmicos: ABIERTO A-11].
 
-- Se cuentan como **evento térmico** los disparos SIF-01, SIF-03 y SIF-08. Son las situaciones en las que el termostato abriría o estaría a punto de abrir.
-- 1.er evento: disparo **enclavado y guardado en EEPROM**; rearme según §7.6.
-- 2.º evento: **BLOQUEADO** hasta el procedimiento de servicio.
-- Que TC3 esté junto a TH1 (§5.5) hace que SIF-01 actúe antes que el termostato en casi todos los casos.
+Persistencia en **NVS** (`Preferences`, espacio `"sis"`), un único bloque binario:
 
-Formato de la EEPROM:
-
-| Dirección | Tipo | Campo |
+| Offset | Tipo | Campo |
 |---|---|---|
 | 0–1 | u16 | magic `0x5153` ("QS") |
 | 2 | u8 | versión del formato (1) |
@@ -585,27 +619,28 @@ Formato de la EEPROM:
 | 6 | u8 | `lockout` (0/1) |
 | 7 | u8 | CRC-8 (polinomio 0x31, inicio 0xFF) de los bytes 0–6 |
 
-Escribir **sólo en eventos** (`EEPROM.update`).
+Escribir **sólo en eventos**.
 
 ### 7.8 Mensajes que el SIS ignora
 Cualquier mensaje que no sea `HB_CTRL`, `REQ_RESET` o `REQ_SERVICE`. Ningún mensaje cambia umbrales.
 
 ### 7.9 Procedimiento de servicio [ABIERTO A-5, PROPUESTA]
 Desbloquear exige **presencia física**:
-1. El técnico envía `servicio desbloquear` por la consola USB de la Mega, que manda `REQ_SERVICE` (op = 1).
+1. El técnico envía `servicio desbloquear` por la consola USB del control, que manda `REQ_SERVICE` (op = 1).
 2. El SIS sólo lo acepta si, en los 30 s siguientes, la puerta se abre y se cierra **3 veces** y TC3 < T_SIS_RESET.
 3. Pone `lockout = 0` y `thermal_events = 0`, y emite `EVENT` DESBLOQUEO_SERVICIO.
 
 ---
 
-## 8. Firmware de control (Arduino Mega)
+## 8. Firmware de control (ESP32-S3)
 
 ### 8.1 Principios
-- Planificador cooperativo con `millis()`; ninguna tarea bloquea más de 5 ms; sin `delay()`.
-- **Watchdog de 1 s.**
-- Sin `String`; buffers estáticos.
+- Sólo funciones de control (§0.2). Sus límites de software son de proceso (capa 1), no funciones SIF.
+- Wi-Fi y Bluetooth apagados (no se usan).
+- Planificador cooperativo en `loop()` con `millis()`; ninguna tarea bloquea más de 5 ms; sin `delay()`.
+- **Task Watchdog** activo.
 - Cada lectura con calidad: VÁLIDA, OBSOLETA (sin actualizar en 3 periodos) o FALLA.
-- La Mega sólo maneja **SSR1**. Los ventiladores los **solicita** al SIS en `HB_CTRL`.
+- Maneja SSR1, SSR2 (FAN_C) y RL2 (orden de apagar FAN_P). El SIS puede forzar o vetar los ventiladores con sus propios relés (RL3, RL4); el control lo ve en `HB_SIS`.
 
 ### 8.2 Módulos
 ```
@@ -614,13 +649,13 @@ control/
 │  ├─ cycle_fsm.h/.cpp       máquina de estados (§8.4)
 │  ├─ profiles.h/.cpp        tabla de perfiles (§8.5)
 │  ├─ heat_ctrl.h/.cpp       histéresis / PI + ventana proporcional
-│  ├─ fan_requests.h/.cpp    cuándo pedir FAN_C y el apagado de FAN_P
+│  ├─ fans.h/.cpp            cuándo encender FAN_C y pedir el apagado de FAN_P
 │  ├─ faults.h/.cpp          clasificación y prioridad de fallas
 │  └─ door.h/.cpp            misma lógica NA/NC que el SIS
 └─ src/
    ├─ main.cpp, scheduler.cpp
    ├─ sensors/  max6675.cpp, sht31.cpp, sgp40.cpp (+ algoritmo de índice VOC), door_hw.cpp
-   ├─ actuators/ ssr1.cpp
+   ├─ actuators/ ssr1.cpp, fan_c.cpp, fan_p.cpp
    ├─ links/    sis_link.cpp, hmi_link.cpp
    ├─ console/  service_console.cpp, csv_log.cpp
    └─ config/   ctrl_params.h, ctrl_pins.h
@@ -631,10 +666,10 @@ control/
 | Periodo | Tarea |
 |---|---|
 | 10 ms | UART (ambos enlaces), puerta con antirrebote de 30 ms |
-| 100 ms | `HB_CTRL`; ventana del SSR1 |
+| 100 ms | `HB_CTRL`; salidas; ventana del SSR1 |
 | 200 ms | `STATUS` al HMI |
 | 250 ms | Leer un MAX6675, alternando TC1 y TC2 (cada uno cada 500 ms) |
-| 1 s | SHT31 (ordenar la medición en un tick y leerla en el siguiente), SGP40 (medición compensada con T/HR del SHT31, ~30 ms) + algoritmo de índice VOC, control de temperatura, temporizadores del ciclo, línea CSV |
+| 1 s | SHT31 (ordenar la medición en un tick y leerla en el siguiente), SGP40 (medición compensada con T/HR del SHT31) + algoritmo de índice VOC, control de temperatura, temporizadores del ciclo, línea CSV |
 
 Bibliotecas sugeridas: Sensirion "I2C SGP40" y "Gas Index Algorithm"; SHT31 de Sensirion o Adafruit. El índice VOC necesita muestras regulares a 1 Hz y tiene un periodo inicial de aprendizaje (`warn_flags` b2).
 
@@ -642,20 +677,20 @@ Bibliotecas sugeridas: Sensirion "I2C SGP40" y "Gas Index Algorithm"; SHT31 de S
 
 | Estado | Acciones al entrar | Mientras | Transiciones |
 |---|---|---|---|
-| AUTOTEST | SSR1 off; pedir FAN_P encendido | Comprobar: TC1/TC2 válidos; SHT31 responde; autotest del SGP40 (comando 0x280E → 0xD400); `HB_SIS` recibido con `sis_state` OK; puerta válida | Todo OK ⇒ LISTO. Falla A ⇒ FALLA. Sin `HB_SIS` en 5 s ⇒ FALLA(7) |
-| LISTO | SSR1 off, `heat_request = 0` | Pedir el apagado de los ventiladores sólo si TC2 < T_FRIO durante FAN_OFF_HOLD_S | `REQ_START` válido + puerta cerrada + SIS OK ⇒ PRECALENTAMIENTO (`RESP_START` 0). Si no ⇒ `RESP_START` con el motivo |
-| PRECALENTAMIENTO | Pedir FAN_P y FAN_C encendidos; `heat_request = 1` | Control hacia `setpoint` cuando `HB_SIS` indique permiso concedido; contar `PREHEAT_TIMEOUT_MIN` | TC1 ≥ setpoint − TREAT_BAND_C ⇒ TRATAMIENTO. Puerta abierta o `REQ_PAUSE` ⇒ PAUSA. `REQ_CANCEL` ⇒ ENFRIAMIENTO. Timeout ⇒ FALLA(5). Falla A ⇒ FALLA |
+| AUTOTEST | SSR1 off, FAN_P on, FAN_C off | Comprobar: TC1/TC2 válidos; SHT31 responde; autotest del SGP40 (comando 0x280E → 0xD400); `HB_SIS` recibido con `sis_state` OK; puerta válida | Todo OK ⇒ LISTO. Falla A ⇒ FALLA. Sin `HB_SIS` en 5 s ⇒ FALLA(7) |
+| LISTO | SSR1 off | Pedir el apagado de FAN_C y FAN_P sólo si TC2 < T_FRIO durante FAN_OFF_HOLD_S (el SIS debe permitir el de FAN_P) | `REQ_START` válido + puerta cerrada + SIS OK ⇒ PRECALENTAMIENTO (`RESP_START` 0). Si no ⇒ `RESP_START` con el motivo |
+| PRECALENTAMIENTO | FAN_P on, FAN_C on; `heat_request = 1` | Control hacia `setpoint` cuando `HB_SIS` indique permiso concedido; contar `PREHEAT_TIMEOUT_MIN` | TC1 ≥ setpoint − TREAT_BAND_C ⇒ TRATAMIENTO. Puerta abierta o `REQ_PAUSE` ⇒ PAUSA. `REQ_CANCEL` ⇒ ENFRIAMIENTO. Timeout ⇒ FALLA(5). Falla A ⇒ FALLA |
 | TRATAMIENTO | — | Control; el tiempo de tratamiento sólo avanza con TC1 ≥ setpoint − TREAT_BAND_C | Tiempo cumplido ⇒ ENFRIAMIENTO. Tope global ⇒ ENFRIAMIENTO (11). Puerta / pausa / cancelar / falla igual que arriba |
-| PAUSA | SSR1 off, `heat_request = 0`, ventiladores pedidos; `pause_left = 300 s` | Cuenta atrás | `REQ_RESUME` + puerta cerrada + SIS OK ⇒ PRECALENTAMIENTO (conserva el tiempo de tratamiento acumulado). `pause_left = 0` ⇒ ENFRIAMIENTO. `REQ_CANCEL` ⇒ ENFRIAMIENTO |
-| ENFRIAMIENTO | SSR1 off, `heat_request = 0`, ventiladores pedidos | — | TC1 < COOL_END_TC1_C y TC2 < COOL_END_TC2_C, o COOL_MAX_MIN ⇒ COMPLETO (o LISTO si viene de una falla o cancelación) |
+| PAUSA | SSR1 off, `heat_request = 0`, ventiladores on; `pause_left = 300 s` | Cuenta atrás | `REQ_RESUME` + puerta cerrada + SIS OK ⇒ PRECALENTAMIENTO (conserva el tiempo de tratamiento acumulado). `pause_left = 0` ⇒ ENFRIAMIENTO. `REQ_CANCEL` ⇒ ENFRIAMIENTO |
+| ENFRIAMIENTO | SSR1 off, `heat_request = 0`, ventiladores on | — | TC1 < COOL_END_TC1_C y TC2 < COOL_END_TC2_C, o COOL_MAX_MIN ⇒ COMPLETO (o LISTO si viene de una falla o cancelación) |
 | COMPLETO | — | Ventiladores hasta enfriar (regla de LISTO) | `REQ_ACK(0)` o apertura de la puerta ⇒ LISTO |
-| FALLA | SSR1 off, `heat_request = 0`, ventiladores pedidos | Mostrar `fault_code` | `REQ_ACK` con la causa resuelta ⇒ ENFRIAMIENTO ⇒ LISTO. SIS DISPARADO: `REQ_REARM` ⇒ `REQ_RESET` al SIS. SIS BLOQUEADO ⇒ se queda en FALLA(13) |
+| FALLA | SSR1 off, `heat_request = 0`, ventiladores on | Mostrar `fault_code` | `REQ_ACK` con la causa resuelta ⇒ ENFRIAMIENTO ⇒ LISTO. SIS DISPARADO: `REQ_REARM` ⇒ `REQ_RESET` al SIS. SIS BLOQUEADO ⇒ se queda en FALLA(13) |
 
 Reglas generales:
 - Tras reinicio o corte: siempre AUTOTEST → LISTO.
 - Sin `HMI_HB` > 10 s con un ciclo activo ⇒ ENFRIAMIENTO (se registra el código 12).
 - Sin `HB_SIS` > 500 ms ⇒ SSR1 off y FALLA(7).
-- La puerta abierta apaga SSR1 de inmediato en la Mega (redundante con el SIS).
+- La puerta abierta apaga SSR1 de inmediato en el control (redundante con el SIS).
 
 ### 8.5 Perfiles [hipótesis, POR MEDIR en F9]
 
@@ -670,17 +705,17 @@ Reglas generales:
 
 Duración del tratamiento: Corta 20 min, Media 40 min, Larga 70 min. Tope global de ciclo: 120 min.
 
-### 8.6 Control de temperatura
+### 8.6 Control de temperatura y actuadores
 - **Etapa 1 (F5)**: histéresis sobre TC1 (encender si < setpoint − 0,5 °C; apagar si > setpoint + 0,5 °C) con un mínimo de 5 s encendido o apagado.
 - **Etapa 2 (F9)**: PI con salida 0–100 % y ventana proporcional de 2 s (mínimo 100 ms on/off), anti-windup por saturación. Ganancias [POR MEDIR].
 - **Arranque suave del PTC** [PROPUESTA, sólo si F7 muestra que el arranque hace caer la fuente]: limitar el ciclo de trabajo durante los primeros 20 s.
-- **Límites**:
+- **Límites de proceso**:
   - TC2 > TC2_MAX_C ⇒ salida a 0 hasta que baje de TC2_RESUME_C.
-  - TC1 > setpoint + SOFT_OVERTEMP_MARGIN_C ⇒ FALLA(6).
+  - TC1 > setpoint + SOFT_OVERTEMP_MARGIN_C ⇒ FALLA(6) (retira `heat_request`: el SIS abre RL1).
+- **FAN_P**: nunca pedir su apagado con `heat_request = 1`, SSR1 activo o TC2 ≥ T_FRIO.
 - La salida de SSR1 sólo se activa con `heat_request = 1`, la puerta cerrada y `HB_SIS` indicando permiso concedido (`io_flags` b2).
-- `fan_p_off_request` sólo se envía con `heat_request = 0`, SSR1 apagado y TC2 < T_FRIO; el SIS hace su propia comprobación.
 
-### 8.7 Consola de servicio y registro (USB, 115200)
+### 8.7 Consola de servicio y registro (USB nativo del ESP32-S3)
 - **CSV a 1 Hz** durante los ciclos (y siempre en las compilaciones de ensayo):
   `t_ms,state,sp,tc1,tc2,tc3,rh,voc,duty,ssr1,permit,fan_c,fan_p,door,sis_state,trip_mask,fault`
 - Comandos de texto: `status`, `log on|off`, `servicio desbloquear` (§7.9).
@@ -693,8 +728,8 @@ Duración del tratamiento: Corta 20 min, Media 40 min, Larga 70 min. Tope global
 Plan detallado: [firmware/hmi/PLAN.md](../firmware/hmi/PLAN.md). Resumen:
 - LVGL 9 + LovyanGFX, PlatformIO, pantalla en horizontal (320 × 240).
 - Zonas táctiles ≥ 56 px (≈ 11 mm); texto ≥ 20 px; fuentes generadas con acentos.
-- Primero, un prototipo con **simulador de la Mega** (`mock_link`); después, `uart_link` con el protocolo de §6.
-- **Enlace**: UART2 reasignado a IO25 (TX) / IO32 (RX), `Serial2.begin(57600, SERIAL_8N1, 32, 25)`. UART0/USB queda para depurar.
+- Primero, un prototipo con **simulador del control** (`mock_link`); después, `uart_link` con el protocolo de §6.
+- **Enlace**: UART2 reasignado a IO25 (TX) / IO32 (RX), `Serial2.begin(115200, SERIAL_8N1, 32, 25)`. Conexión directa al ESP32-S3 (ambos a 3,3 V).
 - Pantallas a partir de `STATUS`: `cycle_state` decide la pantalla; `sis_state == BLOQUEADO` ⇒ "Equipo bloqueado"; evento térmico (`trip_mask` b0, b2 o b7) ⇒ "Se detectó sobrecalentamiento. Revisa los ventiladores" con el botón Rearmar; `fault_code` ⇒ textos de §6.5.
 - Sin `STATUS` > 2 s ⇒ "Sin comunicación".
 - `HMI_HB` cada 500 ms.
@@ -710,9 +745,9 @@ flowchart LR
   F0[F0 Base del repo] --> F1[F1 Prototipo HMI]
   F0 --> F2[F2 Protocolo]
   F0 --> F3[F3 Electrónica de banco]
-  F2 --> F4[F4 Firmware SIS]
+  F2 --> F4[F4 Firmware SIS - ESP32 Dev Kit]
   F3 --> F4
-  F2 --> F5[F5 Firmware control]
+  F2 --> F5[F5 Firmware control - ESP32-S3]
   F3 --> F5
   F1 --> F6[F6 Integración de los 3 nodos]
   F4 --> F6
@@ -726,6 +761,7 @@ flowchart LR
 F1, F2 y F3 pueden avanzar en paralelo.
 
 ### F0 — Base del repositorio
+- **Depende de**: A-13 (modelos de placa).
 - **Tareas**: `platformio.ini` de los tres proyectos con versiones fijadas; `library.json` de `compartido/protocolo`; carpetas `lib/` de lógica; `sis_params.h`, `ctrl_params.h` con los nombres de §12; workflow de CI; `.clang-format`.
 - **Hecho cuando**: `pio run` compila los tres proyectos (vacíos) y `pio test -e native` se ejecuta en control y sis, en local y en CI.
 
@@ -737,64 +773,64 @@ F1, F2 y F3 pueden avanzar en paralelo.
 ### F2 — Biblioteca de protocolo
 - **Tareas**: enums (§6.5), estructuras (§6.4), CRC16 con su vector, codificador, parser con resincronización, contadores de error.
 - **Pruebas `native`**: tramas válidas de cada tipo; CRC erróneo; LEN > 32; basura antes del SOF; trama partida en varios bloques; dos tramas pegadas; `0xAA` dentro del payload; secuencia aleatoria de 10 000 bytes sin bloquear el parser.
-- **Hecho cuando**: todas las pruebas pasan y el parser ocupa ≤ 64 bytes de RAM en el Nano.
+- **Hecho cuando**: todas las pruebas pasan.
 
 ### F3 — Electrónica de banco (sin PTC)
-- **Depende de**: A-9 (para el enlace con el HMI), A-10, y tener RL1.
+- **Depende de**: A-11, A-12, A-13.
 - **Tareas**:
-  1. Montar la distribución de §5.2 con **carga ficticia** en lugar del PTC: lámpara automotriz de 12 V/21 W o resistencia de potencia.
+  1. Montar la distribución de §5.2 con **carga ficticia** en lugar del PTC: lámpara automotriz de 12 V/21 W o resistencia de potencia (carga de ensayo, no parte del equipo).
   2. Ajustar REG_A y REG_B a 5,0–5,1 V antes de conectar placas.
   3. Cablear puerta, MAX6675, S1, S2 y los módulos de relé según [pinout/](pinout/README.md).
   4. Comprobar continuidad, polaridad y estrella de tierra.
 - **Mediciones y comprobaciones**:
   - 5V_A y 5V_B en vacío y con carga; rizado < 100 mV pico a pico.
-  - RL1 y RL2: se activan con 5 V del Nano y **quedan desactivados con la entrada al aire** (Nano desconectado o en reinicio).
-  - SSR1 y SSR2: quedan apagados con la entrada al aire.
+  - **Cada módulo de relé y cada SSR se activa con 3,3 V** del ESP32 y **queda desactivado con la entrada al aire** (placa desconectada o arrancando).
+  - Ninguna salida se activa durante el arranque de cada ESP32 (pulsos en los pines al encender).
+  - Lógica de contactos: FAN_P sólo se apaga con RL2 y RL3 energizados; FAN_C se enciende con SSR2 o RL4.
   - Temperatura del SSR1 con la carga ficticia.
 - **Hecho cuando**: todo dentro de lo esperado y anotado en `docs/ensayos/F3.md`.
 
-### F4 — Firmware del SIS
+### F4 — Firmware del SIS (ESP32 Dev Kit)
 - **Depende de**: F2, F3, A-4, A-5, A-11.
-- **F4a, lógica en PC**: cada SIF con casos que disparan y que no; las 4 combinaciones de la puerta y el antirrebote; TC congelado; pendiente y "calentamiento sin efecto"; EEPROM (formato, CRC, 1.er y 2.º evento, corrupción); rearme aceptado y rechazado; "la comunicación sólo restringe" (ningún `HB_CTRL` concede el permiso ni apaga FAN_P con condiciones inseguras).
-- **F4b, drivers en el Nano**: MAX6675, salidas, WDT, EEPROM, enlace.
-- **F4c, banco**: con RL1/RL2/SSR2 reales y carga ficticia; medir el tiempo puerta → RL1 con osciloscopio o analizador lógico.
-- **Hecho cuando**: tests `native` en verde; respuesta de la puerta < 200 ms medida; el WDT reinicia ante un bucle infinito forzado (en compilación de prueba).
+- **F4a, lógica en PC**: cada SIF con casos que disparan y que no; las 4 combinaciones de la puerta y el antirrebote; TC congelado; pendiente y "calentamiento sin efecto"; persistencia (formato, CRC, 1.er y 2.º evento, corrupción); rearme aceptado y rechazado; "la comunicación sólo restringe" (ningún `HB_CTRL` concede el permiso con condiciones inseguras).
+- **F4b, drivers**: MAX6675, salidas, watchdog, NVS, enlace, radios apagadas.
+- **F4c, banco**: con RL1, RM1 reales y carga ficticia; medir el tiempo puerta → RL1 con osciloscopio o analizador lógico.
+- **Hecho cuando**: tests `native` en verde; respuesta de la puerta < 200 ms medida; el watchdog reinicia ante un bucle infinito forzado (en compilación de prueba).
 
-### F5 — Firmware de control
+### F5 — Firmware de control (ESP32-S3)
 - **Depende de**: F2, F3, A-7.
 - **F5a**: planificador, drivers de sensores, CSV por USB. Lecturas estables durante 1 h.
-- **F5b, lógica en PC**: todas las transiciones de §8.4; pausa de 5 min; tope de 120 min; corte de energía en cada estado; perfiles e ids fuera de rango; prioridad de fallas; solicitudes de ventiladores.
-- **F5c**: SSR1 con carga ficticia; ventana del SSR.
-- **F5d**: enlace con el SIS (heartbeats, permiso, solicitudes de ventiladores, rearme) y comandos `hmi` de la consola para probar sin pantalla.
+- **F5b, lógica en PC**: todas las transiciones de §8.4; pausa de 5 min; tope de 120 min; corte de energía en cada estado; perfiles e ids fuera de rango; prioridad de fallas; reglas de ventiladores.
+- **F5c**: SSR1, SSR2 y RL2 con cargas ficticias; ventana del SSR.
+- **F5d**: enlace con el SIS (heartbeats, permiso, rearme) y comandos `hmi` de la consola para probar sin pantalla.
 - **Hecho cuando**: un ciclo completo con carga ficticia recorre todos los estados y las fallas inyectadas se manejan como en §8.4.
 
 ### F6 — Integración de los tres nodos
-- **Depende de**: A-9.
-- **Tareas**: `uart_link` en el HMI sustituye a `mock_link`; cableado de §5.6; pruebas de pérdida de cada enlace (desconectar cables durante el ciclo).
-- **Hecho cuando**: un ciclo se controla entero desde la pantalla con carga ficticia y cada pérdida de enlace produce la reacción de §5.9.
+- **Tareas**: `uart_link` en el HMI sustituye a `mock_link`; cableado de §5.7; pruebas de pérdida de cada enlace (desconectar cables durante el ciclo).
+- **Hecho cuando**: un ciclo se controla entero desde la pantalla con carga ficticia y cada pérdida de enlace produce la reacción de §5.10.
 
 ### F7 — Integración de potencia y caracterización (con PTC real, sin calzado)
 - **Seguridad durante los ensayos**: siempre con supervisión; PTC sobre superficie no inflamable; extintor a mano; compilación `QS_TEST_BUILD` con `duty` limitado; `T_SIS_MAX` provisional bajo (55 °C) hasta conocer las temperaturas normales.
 - **Mediciones**:
   1. Corriente de arranque del PTC (pinza DC o shunt + osciloscopio) y si la fuente de 20 A la soporta; decidir el arranque suave.
-  2. Temperatura de RL1 y SSR1 a 8,3 A durante 30 min.
+  2. Temperatura de RL1, TH1 y SSR1 a 8,3 A durante 30 min.
   3. Curvas TC1/TC2/TC3 con ciclos de trabajo del 25, 50 y 100 % y ventiladores normales ⇒ **TC3 máxima en operación normal**.
   4. Temperatura de las aletas del PTC y del punto de montaje de TH1: TH1 no debe acercarse a 75 °C en operación normal.
   5. Con FAN_P desconectado y ciclo de trabajo bajo: pendiente de TC3 ⇒ umbral de SIF-03.
-  6. Con TH1 puenteado abierto y el SSR al 100 %: caída de TC3 ⇒ parámetros de SIF-08.
+  6. Con TH1 abierto (simulado) y SSR1 al 100 %: caída de TC3 ⇒ parámetros de SIF-08.
   7. Temperatura interior de la cámara de circuitos tras 1 h.
 - **Resultado**: valores de T_SIS_MAX, SIF-03, SIF-08, TC2_MAX y posiciones definitivas de TC3/TH1/S2, anotados en `docs/ensayos/F7.md` y en la §12.
 
 ### F8 — Validación del SIS
-- **Tareas**: V-01 … V-12 de [seguridad-sis.md](seguridad-sis.md) en el equipo integrado, más SSR1 en corto (puenteado).
-- **Hecho cuando**: todas pasan; tiempos de respuesta anotados en `docs/ensayos/F8.md`. **Repetir F8 tras cualquier cambio del firmware del SIS.**
+- **Tareas**: V-01 … V-13 de [seguridad-sis.md](seguridad-sis.md) en el equipo integrado, más SSR1 en corto (puenteado).
+- **Hecho cuando**: todas pasan; tiempos de respuesta anotados en `docs/ensayos/F8.md`. **Repetir F8 tras cualquier cambio del firmware del SIS o de la versión del core.**
 
 ### F9 — Ajuste de perfiles
 - **Tareas**: ajuste del PI; las 36 combinaciones con calzado de prueba (TC1 dentro de ±2 °C del setpoint en tratamiento, sin sobrepasar el límite); duraciones; curvas de VOC/HR con calzado real ⇒ decisión A-6.
 - **Hecho cuando**: tabla de perfiles definitiva en `profiles.cpp` y en §8.5.
 
 ### F10 — Uso y resistencia
-- **Tareas**: prueba de usabilidad en el equipo real; 20 ciclos consecutivos; corte de energía en cada estado; 4 h continuas de funcionamiento.
+- **Tareas**: prueba de usabilidad en el equipo real; 20 ciclos consecutivos; corte de energía en cada estado; 4 h continuas de funcionamiento; revisión visual del cableado (no hay fusibles).
 - **Hecho cuando**: sin fallas no explicadas; versión 1.0 etiquetada en git.
 
 ---
@@ -804,8 +840,8 @@ F1, F2 y F3 pueden avanzar en paralelo.
 | Nivel | Qué | Dónde | Fase |
 |---|---|---|---|
 | Unitarias | Protocolo, SIF, máquina de estados, perfiles, puerta | PC (`native`) | F2, F4, F5 |
-| HMI | Pantallas con simulador | ESP32 | F1 |
-| Banco eléctrico | Reguladores, módulos de relé, SSR, sensores | Banco | F3 |
+| HMI | Pantallas con simulador | ESP32-32E | F1 |
+| Banco eléctrico | Reguladores, activación con 3,3 V, estado con la entrada al aire, lógica de contactos | Banco | F3 |
 | Integración | Enlaces y fallas de enlace | Banco | F6 |
 | Caracterización | Temperaturas, corrientes | Equipo | F7 |
 | Validación del SIS | Inyección de fallas | Equipo | F8 |
@@ -823,22 +859,22 @@ Los nombres son los que debe usar el código.
 | Constante | Valor | Estado |
 |---|---|---|
 | `QS_PROTO_VERSION` | 1 | [PROPUESTA] |
-| `QS_BAUD_CTRL_SIS`, `QS_BAUD_CTRL_HMI` | 57600 | [PROPUESTA] |
+| `QS_BAUD_CTRL_SIS`, `QS_BAUD_CTRL_HMI` | 115200 | [PROPUESTA] |
 | `QS_MAX_PAYLOAD` | 32 | [PROPUESTA] |
 | `HB_PERIOD_MS` | 100 | [PROPUESTA] |
-| `HB_SIS_TIMEOUT_MS` (lo usa la Mega) | 500 | [PROPUESTA] |
+| `HB_SIS_TIMEOUT_MS` (lo usa el control) | 500 | [PROPUESTA] |
 | `HB_CTRL_TIMEOUT_MS` (lo usa el SIS) | 2000 | [PROPUESTA] |
 | `STATUS_PERIOD_MS` | 200 | [PROPUESTA] |
 | `STATUS_TIMEOUT_MS` (lo usa el HMI) | 2000 | [PROPUESTA] |
 | `HMI_HB_PERIOD_MS` | 500 | [PROPUESTA] |
-| `HMI_LINK_TIMEOUT_MS` (lo usa la Mega) | 10000 | [PROPUESTA] |
+| `HMI_LINK_TIMEOUT_MS` (lo usa el control) | 10000 | [PROPUESTA] |
 
 **SIS (`sis_params.h`)**
 
 | Constante | Valor | Estado |
 |---|---|---|
 | `SIS_LOOP_MS` | 10 | [PROPUESTA] |
-| `SIS_WDT` | `WDTO_250MS` | [PROPUESTA] |
+| `SIS_WDT_MS` | 1000 (Task Watchdog) | [PROPUESTA] |
 | `TC3_PERIOD_MS` | 250 | [PROPUESTA] |
 | `T_SIS_MAX_Q2` | 272 (68 °C); 220 (55 °C) durante F7 | [POR MEDIR] F7 |
 | `T_SIS_RESET_Q2` | 180 (45 °C) | [PROPUESTA] |
@@ -852,14 +888,14 @@ Los nombres son los que debe usar el código.
 | `SIF07_COOL_OFF_MIN` | 10 | [PROPUESTA] |
 | `SIF08_WINDOW_S` / `SIF08_DUTY_PCT` / `SIF08_DROP_Q2` | 60 / 80 / 12 (3 °C) | [POR MEDIR] F7 |
 | `FAN_P_OFF_HOLD_S` | 60 | [PROPUESTA] |
-| `THERMAL_EVENTS_LOCKOUT` | 2 | [DECIDIDO] (aplicado a eventos térmicos: A-11) |
+| `THERMAL_EVENTS_LOCKOUT` | 2 | [DECIDIDO] |
 | `SERVICE_DOOR_TOGGLES` / `SERVICE_WINDOW_MS` | 3 / 30000 | [ABIERTO A-5] |
 
 **Control (`ctrl_params.h`)**
 
 | Constante | Valor | Estado |
 |---|---|---|
-| `CTRL_WDT` | `WDTO_1S` | [PROPUESTA] |
+| `CTRL_WDT_MS` | 2000 (Task Watchdog) | [PROPUESTA] |
 | `TC_READ_PERIOD_MS` | 250 (alternando TC1/TC2) | [PROPUESTA] |
 | `SSR_WINDOW_MS` / `SSR_MIN_ON_MS` | 2000 / 100 | [PROPUESTA] |
 | `HYST_X10` / `HYST_MIN_STATE_MS` | 5 (0,5 °C) / 5000 | [PROPUESTA] |
@@ -883,18 +919,19 @@ Los nombres son los que debe usar el código.
 
 | Riesgo | Impacto | Mitigación | Fase |
 |---|---|---|---|
+| **Sin fusibles** [CONFIRMADO] | Un cortocircuito en un cable fino (ventiladores, reguladores, módulos) lo calienta antes de que actúe la protección de la fuente de 20 A: riesgo de incendio | Riesgo aceptado por el usuario. 12 AWG en la rama principal y del PTC; cables finos cortos, sujetos y lejos de material inflamable; revisión visual | F3, F10 |
+| El SIS no lee nodos de 12 V | Termostato (T1), RL1 soldado, SSR1 en corto y tensión de FAN_P sin medición directa | TC3 junto a TH1; SIF-01/03/08; reacción del control; opciones A-11 (T2) y A-12 | F7, F8 |
+| Módulos que no se activan con 3,3 V | Un relé o SSR que no responde | Elegir módulos compatibles con 3,3 V; comprobar en F3 | F3 |
+| Módulos que no quedan desactivados con la entrada al aire o pines que pulsan al arrancar | Permiso o ventilador en estado inesperado durante el arranque | Pines sin comportamiento de arranque (ver pinouts); comprobar en F3 | F3 |
 | Temperatura de las aletas del PTC muy por encima de 80 °C en uso normal | TH1 y SIF-01 dispararían sin falla | Montar TC3/TH1 en el aire de salida, no en las aletas; medir | F7 |
-| Corriente de arranque del PTC desconocida | Fuente en protección o contacto de RL1 dañado | Medir; arranque suave por firmware; RL1 de 30 A | F7 |
-| Sin fusibles (A-10) | Cable fino en cortocircuito antes de que actúe la fuente | Recomendar fusibles; cableado de 12 AWG en la rama principal | F3 |
+| Corriente de arranque del PTC desconocida | Fuente en protección o contacto de RL1 o TH1 dañado | Medir; arranque suave por firmware; RL1 de 30 A | F7 |
 | SSR genérico sobrevalorado | Sobrecalentamiento, falla en corto | SSR ≥ 40 A con disipador; medir temperatura; RL1 en serie | F3, F7 |
-| Contacto de RL1 soldado sin detección | El SIS pierde su capacidad de corte sin saberlo | Revisión en la validación periódica (F8); SSR1 y TH1 siguen actuando | F8 |
-| El termostato no se puede leer | Un termostato que cicla no se enclava directamente | SIF-01 cerca de TH1; SIF-08 inferida; A-11 | F7, F8 |
-| Enlace Mega → ESP32 a 5 V (A-9) | Daño del ESP32 si se conecta directo | Convertidor de nivel | F6 |
-| Módulos de relé o SSR que no quedan apagados con la entrada al aire | Permiso o ventilador en estado inesperado durante un reinicio | Comprobar en F3; cambiar de módulo si falla | F3 |
 | SGP40 fuera de su rango de temperatura | Lecturas erróneas o degradación | Montarlo en la zona fresca; verificar la hoja de datos | F7 |
-| Mega y Nano con el mismo toolchain | Falla de causa común | SIS sin bibliotecas de terceros; validación tras cambios | F4 |
-| Ventiladores sin tacómetro y sin sensado de tensión | Ventilador detenido sin detección directa | SIF-03, TC2_MAX, TH1 | F7, F8 |
+| Los tres controladores son Espressif con el mismo toolchain | Falla de causa común | SIS mínimo, sin radio ni bibliotecas de terceros; validación tras cambios de versión del core | F4, F8 |
+| Ventiladores sin tacómetro | Ventilador trabado sin detección directa | SIF-03, TC2_MAX, TH1 | F7, F8 |
+| Un solo termostato, de rearme automático | Punto único de falla en la capa 3 | Enclavado del SIS por eventos térmicos | F8 |
 | Sin paro físico | El usuario no puede parar si falla la pantalla | La puerta corta; RD-03; tope de ciclo | F8 |
+| Que una futura modificación mueva funciones entre control y SIS | Rompe la regla de máxima prioridad | ADR-0012; revisar cada cambio contra §0.2 | Siempre |
 
 ---
 
@@ -902,17 +939,19 @@ Los nombres son los que debe usar el código.
 
 | ADR | Decisión | Estado |
 |---|---|---|
+| **0012** | **Control y SIS en controladores separados, estrictamente** (hoy: ESP32-S3 y ESP32 Dev Kit) | [CONFIRMADO], prioridad máxima |
+| **0013** | **Sólo módulos y dispositivos**; sin optoacopladores, convertidores de nivel ni fusibles | [CONFIRMADO] |
 | 0001 | Control y SIS en MCU independientes | [DECIDIDO] |
-| 0002 | SIS en Nano, control en Mega | [CONFIRMADO] |
+| 0002 | Control en ESP32-S3, SIS en ESP32 Dev Kit | [CONFIRMADO] |
 | 0003 | (Retirada; reemplazada por la 0010) | — |
 | 0004 | TC1/TC2 al control, TC3 exclusivo del SIS | [PROPUESTA] |
 | 0005 | Pantalla ESP32 como nodo HMI sólo de comunicación | [CONFIRMADO] |
 | 0006 | Producto doméstico sin paro físico | [CONFIRMADO] |
-| 0007 | Perfiles en la Mega; SIS con límite único | [PROPUESTA] |
-| 0008 | Enclavado en EEPROM y bloqueo tras 2 eventos | [DECIDIDO]; reformulado a eventos térmicos [ABIERTO A-11] |
-| 0009 | FAN_P por relé NC con disparo alto, manejado por el SIS | [DECIDIDO] |
+| 0007 | Perfiles en el control; SIS con límite único | [PROPUESTA] |
+| 0008 | Termostato: enclavado persistente, bloqueo tras 2 eventos; cableado T1/T2 | [DECIDIDO]; [ABIERTO A-11] |
+| 0009 | FAN_P: relé del control y relé de veto del SIS con contactos NC en paralelo | [DECIDIDO] |
 | 0010 | Permiso del PTC con un módulo de relé en serie | [DECIDIDO] |
-| 0011 | Sin componentes auxiliares pequeños; dos reguladores | [CONFIRMADO] |
+| 0011 | Sin componentes auxiliares (versión que movía los ventiladores al SIS) | **Revocada** |
 
 ---
 
@@ -920,5 +959,8 @@ Los nombres son los que debe usar el código.
 
 | Fecha | Versión | Cambio |
 |---|---|---|
-| 2026-09-30 | 1 | Primera versión |
-| 2026-09-30 | 2 | Decisiones del usuario: RL1 (módulo de relé) en serie con el PTC; sin componentes auxiliares; dos reguladores. Consecuencias: el Nano maneja RL1, RL2 y SSR2; la Mega pide los ventiladores; sin divisores ni compuertas ni fusibles; SIF-05 retirada; SIF-03 sólo por pendiente; SIF-08 pasa a "calentamiento sin efecto"; nuevas decisiones abiertas A-9 (nivel lógico del enlace con el HMI), A-10 (fusibles) y A-11 (eventos térmicos). Pinout separado por controlador en `docs/pinout/` |
+| 2026-09-30 | 1 | Primera versión (Mega + Nano) |
+| 2026-09-30 | 2 | RL1 en serie con el PTC; sin componentes auxiliares (el Nano manejaba los ventiladores) |
+| 2026-09-30 | 3 | Regla de máxima prioridad control/SIS; vuelven compuertas, divisores y fusibles |
+| 2026-09-30 | 4 | Sólo módulos: contactos de relé en lugar de compuertas; optoacoplador; convertidor de nivel; sin fusibles |
+| 2026-09-30 | 5 | **Cambio de controladores: control = ESP32-S3, SIS = ESP32 Dev Kit.** Todo a 3,3 V: enlaces directos, sensores a 3,3 V, módulos con disparo compatible con 3,3 V. Sin optoacoplador ni convertidor de nivel (decisión del usuario): el SIS no lee nodos de 12 V; vuelven SIF-03 por pendiente y SIF-08 por "calentamiento sin efecto". Termostato bimetálico de 2 cables: opciones de cableado T1/T2 (A-11). Nuevas decisiones abiertas A-12 (módulo sensor de voltaje) y A-13 (modelos de placa). UART a 115200; persistencia del SIS en NVS; Task Watchdog; radios apagadas. Pinouts nuevos por controlador |

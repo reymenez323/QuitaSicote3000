@@ -1,7 +1,7 @@
 # Pinout — ESP32-32E con pantalla 3.2" (nodo HMI)
 
 Placa E32R32P ([wiki](https://www.lcdwiki.com/3.2inch_ESP32-32E_Display)). Lógica a **3,3 V** (las entradas **no** toleran 5 V).
-El HMI **no se conecta a nada del proceso** [CONFIRMADO]: sólo alimentación y el enlace con la Mega.
+El HMI **no se conecta a nada del proceso** [CONFIRMADO]: sólo alimentación y el enlace con el control (ESP32-S3).
 Las constantes van en `firmware/hmi/src/hal/board_pins.h` y en la configuración de LovyanGFX.
 
 ## 1. Pines internos de la placa (fijos, verificados en la wiki)
@@ -30,21 +30,21 @@ No se reasignan; el firmware sólo los configura.
 
 | Conector de la placa | Pin | Dir. | Señal | Conecta a | Elementos en la línea | Constante |
 |---|---|---|---|---|---|---|
-| **I2C (1,25 mm, 4 pines)** | **IO25** | Salida | UART2 TX → Mega | Mega **D17 (RX2)** | **LS1** canal 2 (LV2 → HV2) | `PIN_LINK_TX = 25` |
-| **I2C (1,25 mm, 4 pines)** | **IO32** | Entrada | UART2 RX ← Mega | Mega **D16 (TX2)** | **LS1** canal 1 (HV1 → LV1). **Nunca 5 V directo** | `PIN_LINK_RX = 32` |
-| I2C (1,25 mm, 4 pines) | 3V3 | — | Alimentación del lado de 3,3 V de LS1 (LV) | LS1.LV | — | — |
+| **I2C (1,25 mm, 4 pines)** | **IO25** | Salida | UART2 TX → control | ESP32-S3 **GPIO16 (RX2)** | Directo (ambos a 3,3 V) | `PIN_LINK_TX = 25` |
+| **I2C (1,25 mm, 4 pines)** | **IO32** | Entrada | UART2 RX ← control | ESP32-S3 **GPIO15 (TX2)** | Directo (ambos a 3,3 V) | `PIN_LINK_RX = 32` |
+| I2C (1,25 mm, 4 pines) | 3V3 | — | **No conectar** | — | — | — |
 | I2C (1,25 mm, 4 pines) | GND | — | Tierra del enlace | GND común | — | — |
 | USB-C | 5 V / GND | Entrada | Alimentación | **5V_A** (REG_A) | Por cable USB-C o pigtail | — |
 
 Configuración del enlace en el firmware (el orden de argumentos es RX y luego TX):
 
 ```cpp
-Serial2.begin(57600, SERIAL_8N1, /*rx=*/32, /*tx=*/25);
+Serial2.begin(115200, SERIAL_8N1, /*rx=*/32, /*tx=*/25);
 ```
 
 **[VERIFICAR con multímetro]** el orden de los 4 pines del conector I2C y que incluya GND y 3V3. Si no incluyera GND, tomarla del conector serie.
 
-**LS1** es un módulo convertidor de nivel lógico (5 V ↔ 3,3 V) y depende de la decisión abierta A-9 ([PLAN-MAESTRO §4.2](../PLAN-MAESTRO.md#42-abiertas)). El ESP32 **no tolera 5 V**: sin LS1 no se debe conectar la salida TX2 de la Mega. Durante el prototipo del HMI (que usa un simulador) no hace falta.
+El control (ESP32-S3) y el HMI trabajan a 3,3 V: la conexión es directa. Durante el prototipo del HMI (que usa un simulador) no hace falta conectar nada.
 
 **[PROPUESTA]** Usar UART2 en el conector I2C en vez de UART0 tiene dos ventajas: UART0 queda libre para depurar por USB y se evita la contención con el CH340C, que también maneja IO3.
 
@@ -61,7 +61,7 @@ Serial2.begin(57600, SERIAL_8N1, /*rx=*/32, /*tx=*/25);
 
 ## 4. Estado durante el reinicio
 
-El HMI no maneja nada del proceso: un reinicio sólo deja la pantalla en negro. Si dura más de 10 s con un ciclo activo, la Mega cancela y enfría.
+El HMI no maneja nada del proceso: un reinicio sólo deja la pantalla en negro. Si dura más de 10 s con un ciclo activo, el control cancela y enfría.
 
 ## 5. `board_pins.h` (contenido esperado)
 
@@ -80,8 +80,8 @@ constexpr int PIN_TOUCH_IRQ = 36;
 constexpr int PIN_LED_R = 22;
 constexpr int PIN_LED_G = 16;
 constexpr int PIN_LED_B = 17;
-// Enlace con la Mega (UART2 reasignado al conector I2C)
+// Enlace con el control, ESP32-S3 (UART2 reasignado al conector I2C)
 constexpr int PIN_LINK_TX = 25;
 constexpr int PIN_LINK_RX = 32;
-constexpr uint32_t LINK_BAUD = 57600;
+constexpr uint32_t LINK_BAUD = 115200;
 ```

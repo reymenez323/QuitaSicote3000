@@ -1,19 +1,16 @@
-# ADR-0011 — Sin componentes auxiliares pequeños; dos reguladores de 5 V
+# ADR-0011 — Sin componentes auxiliares pequeños
 
-**Estado:** Aceptada (decisión del usuario)
+**Estado:** **Revocada** por el usuario (2026-09-30). Sustituida por la ADR-0012.
 
-## Decisión
-- **No** se usan compuertas lógicas, transistores, diodos, resistencias ni fusibles sueltos. Sólo módulos y placas.
-- **Dos reguladores de 5 V**: REG_A para la Mega, el HMI y sus sensores; REG_B para el Nano y TC3.
+## Qué decía
+No usar compuertas, transistores, diodos, resistencias ni fusibles sueltos.
 
-## Consecuencias aplicadas al diseño
-1. **El Nano maneja directamente** RL1 (permiso del PTC), RL2 (ventilador del PTC) y SSR2 (ventilador de circulación). Las combinaciones que antes hacía una compuerta (AND/OR entre la Mega y el SIS) se hacen **por software en el SIS**. La Mega pide los ventiladores en `HB_CTRL`; esas peticiones sólo pueden encender un ventilador, nunca apagarlo contra las condiciones del SIS.
-2. **El SIS no lee nodos de 12 V** (haría falta un divisor). Se pierden:
-   - la lectura directa del termostato (ver ADR-0008);
-   - la realimentación de RL1 (contacto soldado) y la detección eléctrica de SSR1 en corto;
-   - la detección de tensión en el ventilador del PTC.
-   Se compensan con funciones basadas en TC3: subida brusca (SIF-03) y "calentamiento sin efecto" (SIF-08). SIF-05 se retira.
-3. **Puerta**: conexión directa con pull-ups internos, sin resistencias en serie.
-4. **Salidas al aire durante un reinicio**: no hay pull-downs; se exige que los módulos de relé y los SSR queden desactivados con la entrada al aire (comprobar en F3).
-5. **Enlace Mega → ESP32**: el ESP32 no tolera 5 V y no se puede usar un divisor. Decisión abierta A-9 (se recomienda un módulo convertidor de nivel).
-6. **Sin fusibles**: decisión abierta A-10 (se recomienda reconsiderar).
+## Por qué se revocó
+Sin compuertas, la única forma de que el SIS conservara la capacidad de vetar el apagado del ventilador del PTC y de forzar el de circulación era que el Nano manejara los ventiladores. Eso convertía al Nano en controlador de proceso, en contra de la regla de máxima prioridad de la ADR-0012: **control = Mega, SIS = Nano**.
+
+## Relación con la ADR-0013
+La preferencia del usuario por usar sólo módulos y dispositivos se recoge en la [ADR-0013](ADR-0013-solo-modulos-y-dispositivos.md), que la resuelve **sin** mover funciones entre la Mega y el Nano: la lógica AND/OR se hace con contactos de módulos de relé y el sensado con un módulo optoacoplador.
+
+## Lo que sigue vigente de esa etapa
+- Dos reguladores de 5 V independientes (decisión del usuario, se mantiene).
+- El permiso del PTC con un módulo de relé (ADR-0010, se mantiene).

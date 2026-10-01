@@ -2,9 +2,9 @@
 
 ## Objetivo
 
-Tener la interfaz completa funcionando en la pantalla ESP32-32E **sin la Mega ni el SIS**. Un **controlador simulado** dentro del propio ESP32 hace de Mega: responde a los botones, recorre los estados del ciclo y permite inyectar puerta abierta, fallas y pérdida de enlace desde el monitor serie.
+Tener la interfaz completa funcionando en la pantalla ESP32-32E **sin el control ni el SIS**. Un **controlador simulado** dentro del propio ESP32 hace de control (ESP32-S3): responde a los botones, recorre los estados del ciclo y permite inyectar puerta abierta, fallas y pérdida de enlace desde el monitor serie.
 
-Cuando la Mega exista, sólo se sustituye el simulador por el enlace UART real; las pantallas no cambian.
+Cuando el control exista, sólo se sustituye el simulador por el enlace UART real; las pantallas no cambian.
 
 **Fuera de alcance en esta etapa:** protocolo UART real, registro en SD, sonido, LED RGB, atenuación de brillo, OTA.
 
@@ -12,7 +12,7 @@ Cuando la Mega exista, sólo se sustituye el simulador por el enlace UART real; 
 
 | Pieza | Elección | Motivo |
 |---|---|---|
-| Entorno | PlatformIO, `board = esp32dev`, framework Arduino | Mismo entorno que Mega y Nano |
+| Entorno | PlatformIO, `board = esp32dev`, framework Arduino | Mismo entorno que el control y el SIS |
 | Plataforma | `espressif32` (Arduino-ESP32 2.0.x), versión **fijada** | Combinación estable con LovyanGFX y LVGL 9 |
 | Gráficos | **LVGL 9.x**, versión fijada en `platformio.ini` | Requisito del proyecto |
 | Driver de pantalla y táctil | **LovyanGFX** | Soporta ST7789 + XPT2046 en bus SPI compartido, DMA y calibración táctil incluidos |
@@ -120,7 +120,7 @@ flowchart LR
   K -.->|2.º evento termostato| L[Bloqueado]
 ```
 
-"Sin comunicación" se superpone a cualquier pantalla. Las pantallas Calzado → Confirmar son estado **local** del HMI; todas las demás las decide el estado que envía la Mega (o el simulador).
+"Sin comunicación" se superpone a cualquier pantalla. Las pantallas Calzado → Confirmar son estado **local** del HMI; todas las demás las decide el estado que envía el control (o el simulador).
 
 ### Inicio
 
@@ -254,10 +254,10 @@ firmware/hmi/
    │  ├─ lvgl_port.cpp/.h      Búferes, flush, entrada táctil, tick
    │  └─ touch_calib.cpp/.h    Calibración guardada en NVS (Preferences)
    ├─ model/
-   │  └─ hmi_model.h           Lo que la Mega informa: estado, puerta, tiempos, T, HR, VOC, falla
+   │  └─ hmi_model.h           Lo que el control informa: estado, puerta, tiempos, T, HR, VOC, falla
    ├─ link/
    │  ├─ control_link.h        Interfaz: poll(), solicitudes (iniciar, pausar, reanudar, cancelar, reconocer)
-   │  └─ mock_link.cpp/.h      Simulador de la Mega (esta etapa)
+   │  └─ mock_link.cpp/.h      Simulador del control (esta etapa)
    └─ ui/
       ├─ theme.cpp/.h          Paleta, estilos, medidas
       ├─ strings_es.h          Todos los textos
@@ -276,7 +276,7 @@ Principios:
 
 ### Simulador (`mock_link`)
 
-Imita a la Mega con una máquina de estados reducida y **tiempo acelerado** (por defecto 1 min simulado = 2 s). Comandos por el monitor serie (115200):
+Imita al control con una máquina de estados reducida y **tiempo acelerado** (por defecto 1 min simulado = 2 s). Comandos por el monitor serie (115200):
 
 | Comando | Efecto |
 |---|---|
@@ -287,7 +287,7 @@ Imita a la Mega con una máquina de estados reducida y **tiempo acelerado** (por
 | `x<n>` | Factor de aceleración del tiempo |
 | `r` | Reiniciar el simulador |
 
-El monitor serie usa UART0 (USB). El enlace con la Mega irá por UART2 en IO25/IO32 ([pinout](../../docs/pinout/esp32-hmi.md)), así que la depuración por USB sigue disponible después de integrar la Mega.
+El monitor serie usa UART0 (USB). El enlace con el control irá por UART2 en IO25/IO32 ([pinout](../../docs/pinout/esp32-hmi.md)), así que la depuración por USB sigue disponible después de integrar el control.
 
 ## 5. Fases
 
@@ -314,5 +314,5 @@ El monitor serie usa UART0 (USB). El enlace con la Mega irá por UART2 en IO25/I
 
 ## 7. Después del prototipo
 
-1. Sustituir `mock_link` por `uart_link` sobre UART2 (IO25/IO32, 57600) con el protocolo de `compartido/protocolo/` ([PLAN-MAESTRO §6](../../docs/PLAN-MAESTRO.md#6-firmware-común)).
+1. Sustituir `mock_link` por `uart_link` sobre UART2 (IO25/IO32, 115200, directo al ESP32-S3) con el protocolo de `compartido/protocolo/` ([PLAN-MAESTRO §6](../../docs/PLAN-MAESTRO.md#6-firmware-común)).
 2. Decidir el registro en SD, el sonido de confirmación y la atenuación de brillo en reposo.

@@ -1,6 +1,6 @@
 # Firmware del HMI (ESP32-32E, pantalla 3.2")
 
-Interfaz táctil del equipo, hecha con **LVGL**. No lee entradas ni maneja salidas del proceso: sólo dibuja, lee su táctil y se comunica con la Mega ([ADR-0005](../../docs/decisiones/ADR-0005-hmi-esp32.md)).
+Interfaz táctil del equipo, hecha con **LVGL**. No lee entradas ni maneja salidas del proceso: sólo dibuja, lee su táctil y se comunica con el control ([ADR-0005](../../docs/decisiones/ADR-0005-hmi-esp32.md)).
 
 Plan de implementación inicial: **[PLAN.md](PLAN.md)**.
 
@@ -14,11 +14,11 @@ Plan de implementación inicial: **[PLAN.md](PLAN.md)**.
 | Retroiluminación | IO27 (ALTO = encendida) |
 | Táctil | XPT2046 resistivo, **mismo bus SPI**; CS IO33, IRQ IO36 |
 | UART0 | IO3 (RX) / IO1 (TX), conversor USB CH340C: depuración |
-| Enlace con la Mega | UART2 reasignado a IO32 (RX) / IO25 (TX), conector I2C. Pinout completo: [docs/pinout/esp32-hmi.md](../../docs/pinout/esp32-hmi.md) |
+| Enlace con el control | UART2 reasignado a IO32 (RX) / IO25 (TX), conector I2C. Pinout completo: [docs/pinout/esp32-hmi.md](../../docs/pinout/esp32-hmi.md) |
 | Otros (sin uso por ahora) | SD (IO5/18/19/23), altavoz (IO4/IO26), LED RGB (IO22/16/17), BOOT (IO0) |
 
 ## Reglas
 
-- No toma decisiones de proceso ni de seguridad. Todo lo que muestra viene de la Mega; todo lo que envía es una solicitud.
-- Si deja de recibir `ESTADO` de la Mega durante más de 2 s, muestra "Sin comunicación" y no asume valores.
+- No toma decisiones de proceso ni de seguridad. Todo lo que muestra viene del control; todo lo que envía es una solicitud.
+- Si deja de recibir `STATUS` del control durante más de 2 s, muestra "Sin comunicación" y no asume valores.
 - Envía sólo identificadores de perfil, nunca temperaturas ni minutos.
