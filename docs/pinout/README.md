@@ -7,7 +7,7 @@ Un documento independiente por cada controlador:
 | Controlador | Nodo | Qué maneja | Documento |
 |---|---|---|---|
 | ESP32 DevKit V1 n.º 1 | **Control** | SSR1 (PTC), SSR2 (FAN_C), RL2 (apagar FAN_P), TC1, TC2, SHT31, SGP40, puerta | [control-esp32.md](control-esp32.md) |
-| ESP32 DevKit V1 n.º 2 | **SIS** | RL1 (permiso del PTC), RL3 (veto del apagado de FAN_P), RL4 (forzado de FAN_C), TC3, puerta | [sis-esp32.md](sis-esp32.md) |
+| ESP32 DevKit V1 n.º 2 | **SIS** | RL1 (permiso del PTC), RL3 (veto del apagado de FAN_P), RL4 (forzado de FAN_C), puerta | [sis-esp32.md](sis-esp32.md) |
 | ESP32-32E (pantalla 3.2") | HMI | Nada del proceso: pantalla, táctil y enlace | [esp32-hmi.md](esp32-hmi.md) |
 
 Los tres trabajan a **3,3 V**: todos los cables entre ellos son **directos**. Contexto eléctrico completo: [PLAN-MAESTRO §5](../PLAN-MAESTRO.md#5-electrónica).

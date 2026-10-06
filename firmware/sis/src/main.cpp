@@ -7,22 +7,21 @@
 //    RL3  permiso de apagar FAN_P .... sin él, el ventilador del PTC sigue girando
 //    RL4  forzar FAN_C ............... enciende el ventilador de circulación
 //
-//  Sus entradas son: el termopar TC3, la puerta (contactos NA y NC) y lo que
-//  informa el control. Lo que llega del control SÓLO PUEDE RESTRINGIR: puede
-//  quitar el permiso o provocar un disparo, nunca conceder nada.
+//  No tiene termopar (ADR-0004): sus entradas son la puerta (contactos NA y NC)
+//  y lo que informa el control. Lo que llega del control SÓLO PUEDE RESTRINGIR:
+//  puede quitar el permiso o provocar un disparo, nunca conceder nada. Sin
+//  temperatura, "frío" se estima por tiempo sin permiso del PTC.
 //
-//  Tres tareas de FreeRTOS:
+//  Dos tareas de FreeRTOS:
 //
-//    taskSafety        cada 10 ms   puerta -> funciones de seguridad -> relés
-//    taskThermocouple  cada 250 ms  lee TC3 y comprueba que la lectura sea creíble
-//    taskLink          cada 10 ms   habla con el control y guarda en memoria
+//    taskSafety  cada 10 ms   puerta -> funciones de seguridad -> relés
+//    taskLink    cada 10 ms   habla con el control y guarda en memoria
 //
-//  Las tres comparten las variables de la sección "Estado compartido", siempre
+//  Las dos comparten las variables de la sección "Estado compartido", siempre
 //  con el mutex tomado (ver la clase Lock).
 // =============================================================================
 #include <Arduino.h>
 #include <Preferences.h>
-#include <SPI.h>
 #include <esp_task_wdt.h>
 
 #include "config.h"
@@ -51,20 +50,10 @@ bool ptcPermit = false;          // RL1
 bool fanPOffPermit = false;      // RL3
 bool fanCForce = false;          // RL4
 
-// --- Termopar TC3 ---
-bool tc3Valid = false;           // falso hasta la primera lectura buena
-int16_t tc3Q2 = 0;               // última lectura buena, en cuartos de grado
-// Historial de los últimos 10 s (una muestra cada 250 ms), para medir la subida.
-constexpr int HISTORY_LEN = SIF03_WINDOW_MS / TC3_PERIOD_MS + 1;
-int16_t tc3History[HISTORY_LEN];
-int tc3HistoryCount = 0;
-
 // --- Lo que informa el control (HB_CTRL) ---
 bool heartbeatSeen = false;
 uint32_t lastHeartbeatMs = 0;
 uint8_t ctrlFlags = 0;           // bits CtrlFlag del último latido
-uint32_t heartbeatsInWindow = 0;        // para SIF-08: latidos recibidos en la ventana...
-uint32_t heartbeatsWithSsr1 = 0;        // ...y cuántos traían el SSR1 ordenado
 
 // --- Temporizadores de la tarea de seguridad ---
 uint32_t heatingMs = 0;          // tiempo acumulado con el permiso concedido (SIF-07)
@@ -188,8 +177,7 @@ void handleResetRequest(const ReqReset& request) {
   const bool accepted = state == SisState::Tripped             // bloqueado no se rearma así
                         && request.magic == RESET_MAGIC
                         && request.trip_mask_ack == tripMask   // el control sabe qué está rearmando
-                        && tc3Valid
-                        && tc3Q2 < T_SIS_RESET_Q2              // ya se enfrió
+                        && permitOffMs >= COOLED_AFTER_MS      // ya se enfrió
                         && door != Door::Invalid;
   if (!accepted) {
     emitEvent(EVT_RESET_REJECTED);
@@ -203,7 +191,6 @@ void handleResetRequest(const ReqReset& request) {
     saveRequested = true;
   }
   heatingMs = 0;
-  tc3HistoryCount = 0;
   state = SisState::Ok;
   emitEvent(EVT_RESET_OK);
 }
@@ -235,7 +222,7 @@ void serviceStep(uint32_t now) {
     serviceDoorToggles++;
   }
 
-  if (serviceDoorToggles >= SERVICE_DOOR_TOGGLES && tc3Valid && tc3Q2 < T_SIS_RESET_Q2) {
+  if (serviceDoorToggles >= SERVICE_DOOR_TOGGLES && permitOffMs >= COOLED_AFTER_MS) {
     serviceActive = false;
     lockout = false;
     thermalEvents = 0;
@@ -251,54 +238,10 @@ void serviceStep(uint32_t now) {
 //  Funciones de seguridad (SIF)
 // =============================================================================
 
-// SIF-08, "calentamiento sin efecto": en cada minuto con el permiso concedido,
-// si el control ordenó calentar casi todo el tiempo y aun así TC3 bajó, la rama
-// del PTC está abierta (lo más probable: el termostato de 80 °C saltó).
-bool heatingHasNoEffect(uint32_t now) {
-  static bool windowOpen = false;
-  static uint32_t windowStartMs = 0;
-  static int16_t windowStartQ2 = 0;
-
-  if (!ptcPermit || !tc3Valid) {
-    windowOpen = false;
-    return false;
-  }
-  if (!windowOpen) {  // empieza un minuto nuevo
-    windowOpen = true;
-    windowStartMs = now;
-    windowStartQ2 = tc3Q2;
-    heartbeatsInWindow = 0;
-    heartbeatsWithSsr1 = 0;
-    return false;
-  }
-  if (now - windowStartMs < SIF08_WINDOW_MS) return false;
-
-  // Terminó el minuto: se evalúa y se abre otro en la próxima vuelta.
-  windowOpen = false;
-  const bool enoughHeartbeats = heartbeatsInWindow >= SIF08_WINDOW_MS / HB_PERIOD_MS / 2;
-  const bool heatedMostOfTheTime =
-      heartbeatsWithSsr1 * 100 >= heartbeatsInWindow * SIF08_MIN_DUTY_PCT;
-  const bool temperatureDropped = windowStartQ2 - tc3Q2 >= SIF08_DROP_Q2;
-  return enoughHeartbeats && heatedMostOfTheTime && temperatureDropped;
-}
-
 // Devuelve las causas de disparo que se cumplen ahora mismo (0 = ninguna).
 // La puerta (SIF-02) no está aquí: no enclava, sólo quita el permiso.
-uint16_t activeTripCauses(uint32_t now, bool controlAlive) {
+uint16_t activeTripCauses(bool controlAlive) {
   uint16_t causes = 0;
-
-  // SIF-01: sobretemperatura.
-  if (tc3Valid && tc3Q2 >= T_SIS_MAX_Q2) causes |= TRIP_OVERTEMP;
-
-  // SIF-03: TC3 sube demasiado rápido mientras se calienta (no hay flujo de aire).
-  const bool historyFull = tc3HistoryCount == HISTORY_LEN;
-  if (ptcPermit && tc3Valid && historyFull) {
-    const int16_t riseIn10s = tc3History[HISTORY_LEN - 1] - tc3History[0];
-    if (riseIn10s >= SIF03_MAX_RISE_Q2) causes |= TRIP_FAST_RISE;
-  }
-
-  // SIF-04: sin un TC3 creíble el SIS está ciego.
-  if (!tc3Valid) causes |= TRIP_SENSOR;
 
   // SIF-06: el control dejó de hablar con el permiso concedido.
   if (ptcPermit && !controlAlive) causes |= TRIP_HEARTBEAT;
@@ -306,18 +249,14 @@ uint16_t activeTripCauses(uint32_t now, bool controlAlive) {
   // SIF-07: demasiado tiempo calentando.
   if (heatingMs > SIF07_MAX_HEAT_MS) causes |= TRIP_MAX_HEAT_TIME;
 
-  // SIF-08: se calienta pero la temperatura baja.
-  if (heatingHasNoEffect(now)) causes |= TRIP_NO_EFFECT;
-
   return causes;
 }
 
-// Autotest de arranque: hace falta un TC3 válido y una puerta legible.
+// Autotest de arranque: hace falta una puerta legible.
 void selfTestStep(uint32_t now) {
   static bool failureReported = false;
-  const bool doorReadable = door != Door::Invalid;
 
-  if (tc3Valid && doorReadable) {
+  if (door != Door::Invalid) {
     if (tripMask != 0) {
       trip(tripMask);  // había un disparo guardado de antes del corte
     } else {
@@ -325,28 +264,25 @@ void selfTestStep(uint32_t now) {
     }
     return;
   }
-  if (now < SELFTEST_MS) return;  // todavía dentro del plazo
+  if (now < SELFTEST_MS || failureReported) return;
 
-  if (!failureReported) {
-    failureReported = true;
-    emitEvent(EVT_SELFTEST_FAILED, tc3Valid ? 2 : 1);  // 1 = TC3, 2 = puerta
-  }
-  // Sin TC3: disparo. Con la puerta ilegible no se enclava nada: se espera en
-  // ARRANQUE (con el PTC sin permiso) hasta que vuelva a leerse bien.
-  if (!tc3Valid) trip(TRIP_SENSOR);
+  // Con la puerta ilegible no se enclava nada: se espera en ARRANQUE (con el
+  // PTC sin permiso) hasta que vuelva a leerse bien.
+  failureReported = true;
+  emitEvent(EVT_SELFTEST_FAILED, 2);  // 2 = puerta
 }
 
 // Las ecuaciones de los tres relés (PLAN-MAESTRO §7.5).
 void updateOutputs(bool controlAlive) {
   const bool ok = state == SisState::Ok;
   const bool heatRequest = controlAlive && (ctrlFlags & CTRL_HEAT_REQUEST);
-  const bool cold = tc3Valid && tc3Q2 < T_COLD_Q2;
+  const bool cold = permitOffMs >= COOLED_AFTER_MS;  // estimado: sin termopar no se mide
 
   // RL1: TODAS las condiciones a la vez. heat_request sólo puede quitarlo.
-  ptcPermit = ok && door == Door::Closed && heatRequest && tc3Valid && tc3Q2 < T_SIS_MAX_Q2;
+  ptcPermit = ok && door == Door::Closed && heatRequest;
 
-  // RL3: FAN_P sólo puede apagarse con todo en orden, frío y tras un rato sin calentar.
-  fanPOffPermit = ok && !ptcPermit && cold && permitOffMs >= FAN_P_OFF_HOLD_MS;
+  // RL3: FAN_P sólo puede apagarse con todo en orden y tras enfriarse.
+  fanPOffPermit = ok && !ptcPermit && cold;
 
   // RL4: FAN_C se fuerza ante cualquier duda.
   fanCForce = ptcPermit || !ok || !controlAlive || !cold;
@@ -378,13 +314,13 @@ void safetyStep(uint32_t now) {
       selfTestStep(now);
       break;
     case SisState::Ok: {
-      const uint16_t causes = activeTripCauses(now, controlAlive);
+      const uint16_t causes = activeTripCauses(controlAlive);
       if (causes != 0) trip(causes);
       break;
     }
     case SisState::Tripped:
     case SisState::Locked:
-      tripMask |= activeTripCauses(now, controlAlive);  // se anotan las causas nuevas
+      tripMask |= activeTripCauses(controlAlive);  // se anotan las causas nuevas
       break;
   }
 
@@ -457,82 +393,6 @@ void taskSafety(void*) {
 }
 
 // =============================================================================
-//  Tarea del termopar TC3 (250 ms)
-// =============================================================================
-
-// Lee el MAX6675 por SPI. Devuelve false si no hay una lectura utilizable.
-// Los 16 bits: D15 = 0, D14–D3 = temperatura × 4, D2 = 1 si el termopar está abierto.
-bool readMax6675(int16_t& q2) {
-  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
-  digitalWrite(PIN_CS_TC3, LOW);
-  const uint16_t raw = SPI.transfer16(0);
-  digitalWrite(PIN_CS_TC3, HIGH);  // al subir CS empieza la siguiente conversión
-  SPI.endTransaction();
-
-  if (raw == 0x0000) return false;  // módulo sin alimentar o salida en corto a GND
-  if (raw & 0x8006) return false;   // bits fijos incorrectos o termopar abierto
-  q2 = raw >> 3;
-  return true;
-}
-
-// Decide si TC3 es creíble y guarda la muestra en el historial.
-void updateTc3(bool readOk, int16_t q2) {
-  static uint8_t badReads = 0;
-  static bool inRange = false;
-  static bool frozen = false;
-  static int16_t lastQ2 = INT16_MIN;
-  static uint32_t sameSinceMs = 0;
-
-  Lock lock;
-  const uint32_t now = millis();
-
-  const bool bad = !readOk || q2 < TC3_MIN_Q2 || q2 > TC3_MAX_Q2;
-  if (bad) {
-    // Una lectura mala suelta se tolera; tres seguidas, no.
-    if (badReads < TC3_BAD_READS) badReads++;
-    if (badReads >= TC3_BAD_READS) inRange = false;
-  } else {
-    badReads = 0;
-    inRange = true;
-    tc3Q2 = q2;
-
-    // "Congelado": exactamente la misma lectura durante 60 s mientras se
-    // calienta. Sólo se libera cuando la lectura vuelve a cambiar.
-    if (q2 != lastQ2) {
-      lastQ2 = q2;
-      sameSinceMs = now;
-      frozen = false;
-    } else if (!ptcPermit) {
-      sameSinceMs = now;
-    } else if (now - sameSinceMs > TC3_FROZEN_MS) {
-      frozen = true;
-    }
-  }
-  tc3Valid = inRange && !frozen;
-
-  // Historial para SIF-03: sólo lecturas válidas y consecutivas.
-  if (!tc3Valid) {
-    tc3HistoryCount = 0;
-  } else {
-    if (tc3HistoryCount == HISTORY_LEN) {
-      memmove(&tc3History[0], &tc3History[1], sizeof(int16_t) * (HISTORY_LEN - 1));
-      tc3HistoryCount--;
-    }
-    tc3History[tc3HistoryCount++] = tc3Q2;
-  }
-}
-
-void taskThermocouple(void*) {
-  TickType_t wakeTime = xTaskGetTickCount();
-  for (;;) {
-    vTaskDelayUntil(&wakeTime, pdMS_TO_TICKS(TC3_PERIOD_MS));  // el MAX6675 tarda ≈ 220 ms por conversión
-    int16_t q2 = 0;
-    const bool readOk = readMax6675(q2);
-    updateTc3(readOk, q2);
-  }
-}
-
-// =============================================================================
 //  Tarea del enlace con el control
 // =============================================================================
 
@@ -548,8 +408,6 @@ void handleFrame(const Frame& frame) {
       heartbeatSeen = true;
       lastHeartbeatMs = millis();
       ctrlFlags = heartbeat.ctrl_flags;
-      heartbeatsInWindow++;
-      if (ctrlFlags & CTRL_SSR1_CMD) heartbeatsWithSsr1++;
       break;
     }
     case MSG_REQ_RESET: {
@@ -572,7 +430,6 @@ void sendHeartbeat() {
     heartbeat.proto_ver = PROTO_VERSION;
     heartbeat.sis_state = static_cast<uint8_t>(state);
     heartbeat.trip_mask = tripMask;
-    heartbeat.tc3_q2 = tc3Valid ? tc3Q2 : TEMP_INVALID;
     heartbeat.thermal_events = thermalEvents;
     if (door == Door::Closed) heartbeat.io_flags |= SIS_IO_DOOR_CLOSED;
     if (door == Door::Invalid) heartbeat.io_flags |= SIS_IO_DOOR_INVALID;
@@ -627,13 +484,10 @@ void setup() {
   }
   pinMode(PIN_DOOR_NO, INPUT_PULLUP);
   pinMode(PIN_DOOR_NC, INPUT_PULLUP);
-  digitalWrite(PIN_CS_TC3, HIGH);
-  pinMode(PIN_CS_TC3, OUTPUT);
 
   btStop();  // sin radios: el Wi-Fi nunca se inicia en este firmware
 
   Serial.begin(115200);  // USB: sólo depuración
-  SPI.begin(PIN_SPI_SCK, PIN_SPI_MISO, -1, -1);
   controlPort.begin(LINK_BAUD, SERIAL_8N1, PIN_CTRL_RX, PIN_CTRL_TX);
 
   stateMutex = xSemaphoreCreateMutex();
@@ -646,7 +500,6 @@ void setup() {
 
   // La seguridad tiene la prioridad más alta. Todas en el núcleo 1.
   xTaskCreatePinnedToCore(taskSafety, "safety", 4096, nullptr, 5, nullptr, 1);
-  xTaskCreatePinnedToCore(taskThermocouple, "tc3", 4096, nullptr, 4, nullptr, 1);
   xTaskCreatePinnedToCore(taskLink, "link", 8192, nullptr, 3, nullptr, 1);
 }
 

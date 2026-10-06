@@ -22,7 +22,7 @@ La comunicación es **informativa**. Nada que viaje por ella puede conceder el p
 | Mensaje | Sentido | Periodo | Contenido |
 |---|---|---|---|
 | `HB_CTRL` | Control → SIS | 100 ms | Estado del ciclo; `heat_request`; estado de las salidas del control |
-| `HB_SIS` | SIS → Control | 100 ms | Estado del SIS, causas de disparo, TC3, puerta, estado de sus relés, eventos térmicos |
+| `HB_SIS` | SIS → Control | 100 ms | Estado del SIS, causas de disparo, puerta, estado de sus relés, eventos térmicos |
 | `REQ_RESET` / `REQ_SERVICE` | Control → SIS | evento | Solicitud de rearme / desbloqueo (el SIS valida) |
 | `EVENT` | SIS → Control | evento | Disparo, rearme, bloqueo… |
 | `HMI_HB` | HMI → Control | 500 ms | Latido del HMI |
