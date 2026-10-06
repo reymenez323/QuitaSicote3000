@@ -1,24 +1,36 @@
 # Firmware del HMI (ESP32-32E, pantalla 3.2")
 
-Interfaz táctil del equipo, hecha con **LVGL**. No lee entradas ni maneja salidas del proceso: sólo dibuja, lee su táctil y se comunica con el control ([ADR-0005](../../docs/decisiones/ADR-0005-hmi-esp32.md)).
+Interfaz táctil del equipo, hecha con **LVGL 9** y **LovyanGFX**. No lee entradas ni maneja salidas del proceso: sólo dibuja, lee su táctil y se comunica con el control ([ADR-0005](../../docs/decisiones/ADR-0005-hmi-esp32.md)).
 
-Plan de implementación inicial: **[PLAN.md](PLAN.md)**.
+Diseño de las pantallas y criterios de uso: [PLAN.md](PLAN.md). Pines: [docs/pinout/esp32-hmi.md](../../docs/pinout/esp32-hmi.md).
 
-## Placa (verificado en la [wiki](https://www.lcdwiki.com/3.2inch_ESP32-32E_Display))
+## Archivos
 
-| Recurso | Detalle |
+| Archivo | Contenido |
 |---|---|
-| MCU | ESP32-32E (ESP32-WROOM-32E), 240 MHz, 520 KB SRAM, **sin PSRAM**, 4 MB flash |
-| Pantalla | ST7789P3, 240×320 nativa, IPS, RGB565; **se usa en horizontal (320×240)** |
-| Bus de pantalla (SPI) | CS IO15, DC IO2, SCLK IO14, MOSI IO13, MISO IO12; RST compartido con EN |
-| Retroiluminación | IO27 (ALTO = encendida) |
-| Táctil | XPT2046 resistivo, **mismo bus SPI**; CS IO33, IRQ IO36 |
-| UART0 | IO3 (RX) / IO1 (TX), conversor USB CH340C: depuración |
-| Enlace con el control | UART2 reasignado a IO32 (RX) / IO25 (TX), conector I2C. Pinout completo: [docs/pinout/esp32-hmi.md](../../docs/pinout/esp32-hmi.md) |
-| Otros (sin uso por ahora) | SD (IO5/18/19/23), altavoz (IO4/IO26), LED RGB (IO22/16/17), BOOT (IO0) |
+| [include/lv_conf.h](include/lv_conf.h) | Configuración de LVGL (memoria, fuentes) |
+| [src/display.h](src/display.h) | Pines de la placa y configuración de la pantalla y el táctil |
+| [src/ui.cpp](src/ui.cpp) | Las pantallas: textos → colores → piezas comunes → botones → pantallas → selección |
+| [src/ui.h](src/ui.h) | Lo que se comparten `ui.cpp` y `main.cpp` |
+| [src/main.cpp](src/main.cpp) | Las dos tareas, el enlace con el control y la unión de LVGL con la pantalla |
 
-## Reglas
+## Cómo funciona
+
+- `taskLink` recibe `STATUS` del control (cada 200 ms), envía el latido (cada 500 ms) y las solicitudes de los botones.
+- `taskUi` muestra la pantalla que corresponde al estado que informa el control. Sólo el asistente de selección (Calzado → Intensidad → Duración → Confirmar) es estado local.
+
+Reglas:
 
 - No toma decisiones de proceso ni de seguridad. Todo lo que muestra viene del control; todo lo que envía es una solicitud.
-- Si deja de recibir `STATUS` del control durante más de 2 s, muestra "Sin comunicación" y no asume valores.
-- Envía sólo identificadores de perfil, nunca temperaturas ni minutos.
+- Envía sólo números de opción, nunca temperaturas ni minutos.
+- Sin `STATUS` durante 2 s muestra "Sin comunicación" y no asume valores.
+
+## Primera puesta en marcha
+
+1. En el primer arranque pide **calibrar el táctil** (tocar las 4 esquinas). Para repetirlo: mantener el dedo en la pantalla 3 s al encender.
+2. Comprobar los colores y la orientación; si no son correctos, ajustar `invert`, `rgb_order` o `SCREEN_ROTATION` en [src/display.h](src/display.h).
+
+## Pendiente
+
+- **Fuentes con acentos** (PLAN.md §2): las fuentes incluidas en LVGL sólo traen ASCII, así que por ahora los textos de `ui.cpp` van sin acentos ("Duracion"). Hay que generarlas con `lv_font_conv`.
+- Prueba en la placa real y prueba de usabilidad.

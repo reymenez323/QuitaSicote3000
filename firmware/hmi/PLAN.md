@@ -1,8 +1,10 @@
-# Plan: interfaz LVGL inicial (prototipo sin el resto del equipo)
+# Plan: interfaz LVGL inicial
+
+> **Nota (2026-10-06):** este plan sigue siendo la referencia del **diseño** (pantallas, medidas, colores, criterios de uso). La **estructura del código** de la §4 y el simulador `mock_link` ya no aplican: el HMI quedó en `src/main.cpp` + `src/ui.cpp` con dos tareas de FreeRTOS, conectado directamente al control ([README](README.md)).
 
 ## Objetivo
 
-Tener la interfaz completa funcionando en la pantalla ESP32-32E **sin el control ni el SIS**. Un **controlador simulado** dentro del propio ESP32 hace de control (ESP32-S3): responde a los botones, recorre los estados del ciclo y permite inyectar puerta abierta, fallas y pérdida de enlace desde el monitor serie.
+Tener la interfaz completa funcionando en la pantalla ESP32-32E **sin el control ni el SIS**. Un **controlador simulado** dentro del propio ESP32 hace de control (ESP32 DevKit V1 de control): responde a los botones, recorre los estados del ciclo y permite inyectar puerta abierta, fallas y pérdida de enlace desde el monitor serie.
 
 Cuando el control exista, sólo se sustituye el simulador por el enlace UART real; las pantallas no cambian.
 
@@ -314,5 +316,5 @@ El monitor serie usa UART0 (USB). El enlace con el control irá por UART2 en IO2
 
 ## 7. Después del prototipo
 
-1. Sustituir `mock_link` por `uart_link` sobre UART2 (IO25/IO32, 115200, directo al ESP32-S3) con el protocolo de `compartido/protocolo/` ([PLAN-MAESTRO §6](../../docs/PLAN-MAESTRO.md#6-firmware-común)).
+1. Sustituir `mock_link` por `uart_link` sobre UART2 (IO25/IO32, 115200, directo al ESP32 DevKit V1 de control) con el protocolo de `compartido/protocolo/` ([PLAN-MAESTRO §6](../../docs/PLAN-MAESTRO.md#6-firmware-común)).
 2. Decidir el registro en SD, el sonido de confirmación y la atenuación de brillo en reposo.

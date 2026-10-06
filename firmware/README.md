@@ -1,31 +1,55 @@
 # Firmware
 
-> Regla de máxima prioridad: **control = ESP32-S3, SIS = ESP32 Dev Kit** ([ADR-0012](../docs/decisiones/ADR-0012-regla-mega-control-nano-sis.md)).
+> Regla de máxima prioridad: **el control y el SIS corren en dos ESP32 DevKit V1 distintos** ([ADR-0012](../docs/decisiones/ADR-0012-regla-mega-control-nano-sis.md)).
 
-Tres proyectos PlatformIO independientes, todos con framework Arduino-ESP32:
+Tres proyectos PlatformIO (framework Arduino-ESP32). **Toda la lógica corre en tareas de FreeRTOS** y cada proyecto cabe en muy pocos archivos, pensados para leerse de arriba abajo.
 
-| Carpeta | Placa | Rol |
-|---|---|---|
-| [control/](control/README.md) | ESP32-S3 | Ciclo, sensores, SSR1 y ventiladores |
-| [sis/](sis/README.md) | ESP32 Dev Kit | Seguridad |
-| [hmi/](hmi/README.md) | ESP32-32E con pantalla 3.2" | Interfaz LVGL; sólo comunicación |
-| [compartido/protocolo/](compartido/protocolo/README.md) | — | Ids, mensajes, CRC: contrato común |
+```
+firmware/
+├─ compartido/
+│  └─ qs_protocol.h     El "contrato": identificadores, mensajes y tramas. Lo incluyen los tres.
+├─ sis/                 ESP32 DevKit V1 n.º 2 — sólo seguridad
+│  └─ src/  config.h (pines y umbrales) · main.cpp
+├─ control/             ESP32 DevKit V1 n.º 1 — sólo control
+│  └─ src/  config.h (pines, parámetros y perfiles) · sensors.h · main.cpp
+└─ hmi/                 ESP32-32E con pantalla 3.2" — sólo interfaz
+   ├─ include/lv_conf.h (configuración de LVGL)
+   └─ src/  display.h (pines y pantalla) · ui.h · ui.cpp (pantallas) · main.cpp
+```
 
-Estructura de cada proyecto: `src/`, `include/`, `lib/`, `test/`. Especificación completa: [docs/PLAN-MAESTRO.md](../docs/PLAN-MAESTRO.md).
+## Tareas de cada nodo
 
-## Reglas
+| Nodo | Tarea | Periodo | Qué hace |
+|---|---|---|---|
+| SIS | `taskSafety` | 10 ms | Puerta → funciones de seguridad → relés RL1, RL3, RL4. Vigilada por el watchdog (1 s) |
+| SIS | `taskThermocouple` | 250 ms | Lee TC3 y comprueba que sea creíble |
+| SIS | `taskLink` | 10 ms | Habla con el control; guarda en memoria no volátil |
+| Control | `taskCycle` | 10 ms | Puerta → máquina de estados → SSR1 y ventiladores. Vigilada por el watchdog (2 s) |
+| Control | `taskSensors` | 250 ms | TC1 y TC2 alternados; cada segundo, humedad y olor |
+| Control | `taskSisLink` | 10 ms | Recibe `HB_SIS`; envía `HB_CTRL`, rearmes y servicio |
+| Control | `taskHmiLink` | 10 ms | Recibe las solicitudes de la pantalla; envía `STATUS` |
+| Control | `taskConsole` | 100 ms | Comandos por USB y registro CSV |
+| HMI | `taskUi` | 5 ms | LVGL: dibuja y lee el táctil |
+| HMI | `taskLink` | 10 ms | Recibe `STATUS`; envía el latido y las solicitudes |
 
-- `sis/` no incluye código de `control/` ni de `hmi/`; sólo `compartido/protocolo/`.
-- `compartido/` contiene definiciones, no lógica (salvo el CRC y el parser).
-- La lógica se separa del hardware para probarla en PC (`pio test -e native`).
-- Cada cambio del SIS, o de la versión del core Arduino-ESP32, repite su [validación](../docs/seguridad-sis.md#validación).
+En cada nodo, las tareas comparten unas pocas variables globales protegidas por **un mutex** (clase `Lock`). Donde una tarea le encarga algo a otra se usa **una cola** (avisos del SIS, botones del HMI).
 
-## Pruebas
+## Compilar y cargar
 
-| Nivel | Qué | Dónde |
-|---|---|---|
-| Unitarias | Funciones SIF, PID, máquina de estados, parser/CRC del protocolo | PC (`native`) |
-| HMI con simulador | Todas las pantallas con un controlador simulado | ESP32-32E ([PLAN](hmi/PLAN.md)) |
-| Integración | Enlaces UART, heartbeats, fallas de enlace | Placas en banco |
-| Validación SIS | Inyección de fallas V-01…V-13 | Banco y equipo |
-| Perfiles | Las 36 combinaciones calzado × intensidad × duración | Equipo completo |
+Desde la carpeta de cada proyecto (`sis`, `control` o `hmi`):
+
+```bash
+pio run -t upload
+```
+
+```bash
+pio device monitor
+```
+
+Si `pio` no está en el PATH: `%USERPROFILE%\.platformio\penv\Scripts\pio.exe`.
+
+Las dos placas DevKit V1 son iguales: **etiquétalas** ("CONTROL" y "SIS") y carga en cada una su firmware.
+
+## Estado
+
+Los tres proyectos compilan. **Nada se ha probado todavía en hardware.** No hay pruebas automáticas: la validación es en banco, siguiendo [docs/seguridad-sis.md](../docs/seguridad-sis.md#validación) (inyección de fallas V-01…V-13). Repetirla tras cada cambio del SIS.

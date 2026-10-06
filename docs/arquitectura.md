@@ -2,7 +2,7 @@
 
 Resumen. Detalle completo en [PLAN-MAESTRO.md](PLAN-MAESTRO.md); pines en [pinout/](pinout/README.md).
 
-> **Regla de máxima prioridad**: el **control** es el **ESP32-S3** y el **SIS** es el **ESP32 Dev Kit**. Ninguna función se mueve de uno a otro ([ADR-0012](decisiones/ADR-0012-regla-mega-control-nano-sis.md)).
+> **Regla de máxima prioridad**: el **control** es el **ESP32 DevKit V1 de control** y el **SIS** es el **ESP32 Dev Kit**. Ninguna función se mueve de uno a otro ([ADR-0012](decisiones/ADR-0012-regla-mega-control-nano-sis.md)).
 > **Hardware**: sólo módulos y dispositivos; sin optoacopladores, convertidores de nivel ni fusibles ([ADR-0013](decisiones/ADR-0013-solo-modulos-y-dispositivos.md)).
 
 ## Capas de protección
@@ -10,7 +10,7 @@ Resumen. Detalle completo en [PLAN-MAESTRO.md](PLAN-MAESTRO.md); pines en [pinou
 ```
 Capa 3  Termostato bimetálico 80 °C en serie con el PTC   → hardware, sin software
 Capa 2  SIS (ESP32 Dev Kit): su termopar y relé de permiso → software mínimo e independiente
-Capa 1  Control (ESP32-S3): límites de proceso sobre el SSR → lógica de proceso
+Capa 1  Control (ESP32 DevKit V1 de control): límites de proceso sobre el SSR → lógica de proceso
 ```
 
 Cada capa apaga el PTC por sí sola. El HMI no es una capa de protección.
@@ -19,7 +19,7 @@ Cada capa apaga el PTC por sí sola. El HMI no es una capa de protección.
 
 ```mermaid
 flowchart LR
-  HMI[HMI · ESP32-32E<br/>LVGL, sólo comunicación] <-->|UART 3,3 V| CTRL[CONTROL · ESP32-S3<br/>ciclo, sensores, SSR1, ventiladores]
+  HMI[HMI · ESP32-32E<br/>LVGL, sólo comunicación] <-->|UART 3,3 V| CTRL[CONTROL · ESP32 DevKit V1 de control<br/>ciclo, sensores, SSR1, ventiladores]
   CTRL <-->|UART 3,3 V + heartbeat| SIS[SIS · ESP32 Dev Kit<br/>funciones de seguridad]
 
   CTRL --- S1[TC1, TC2 · SHT31 · SGP40 · puerta]
@@ -31,7 +31,7 @@ flowchart LR
 
 ## Reparto de responsabilidades
 
-| Elemento | Control (ESP32-S3) | SIS (ESP32 Dev Kit) | HMI (ESP32-32E) |
+| Elemento | Control (ESP32 DevKit V1 de control) | SIS (ESP32 Dev Kit) | HMI (ESP32-32E) |
 |---|---|---|---|
 | TC1 (aire recámara), TC2 (salida PTC) | Lee | — | — |
 | TC3 (junto al termostato) | — | Lee, exclusivo ([ADR-0004](decisiones/ADR-0004-asignacion-termopares.md)) | — |

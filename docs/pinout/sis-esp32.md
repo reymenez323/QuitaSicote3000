@@ -2,9 +2,9 @@
 
 > Regla de máxima prioridad: este controlador hace **sólo seguridad** ([ADR-0012](../decisiones/ADR-0012-regla-mega-control-nano-sis.md)). No maneja ventiladores: sólo **veta** el apagado de FAN_P (RL3) y **fuerza** FAN_C (RL4) con sus propios relés.
 
-Placa asumida: **ESP32 Dev Kit con ESP32-WROOM-32** (DevKitC o DOIT, 30 o 38 pines) [VERIFICAR modelo exacto, A-13]. Todos los pines elegidos existen en ambas versiones. Lógica a **3,3 V**: ningún pin tolera 5 V.
+Placa: **ESP32 DevKit V1** (DOIT, ESP32-WROOM-32, 30 pines) [CONFIRMADO, 2026-10-06], el mismo modelo que la del control: **etiquetar las dos placas**. Lógica a **3,3 V**: ningún pin tolera 5 V.
 Sólo módulos y dispositivos, sin componentes sueltos ([ADR-0013](../decisiones/ADR-0013-solo-modulos-y-dispositivos.md)). Estado: **[PROPUESTA]** salvo lo marcado.
-Las constantes van en `firmware/sis/src/config/sis_pins.h`.
+Las constantes van en `firmware/sis/src/config.h`.
 
 ## 1. Alimentación y pines de sistema
 
@@ -19,16 +19,16 @@ Las constantes van en `firmware/sis/src/config/sis_pins.h`.
 
 | GPIO | Dir. | Señal | Conecta a (componente.terminal) | Lógica | Constante |
 |---|---|---|---|---|---|
-| 32 | Entrada (pull-up interno) | Puerta NA | SW1.**NA** (la misma línea va al control GPIO4) | BAJO = contacto cerrado | `PIN_DOOR_NO` |
-| 33 | Entrada (pull-up interno) | Puerta NC | SW1.**NC** (la misma línea va al control GPIO5) | BAJO = contacto cerrado | `PIN_DOOR_NC` |
+| 32 | Entrada (pull-up interno) | Puerta NA | SW1.**NA** (la misma línea va al control GPIO32) | BAJO = contacto cerrado | `PIN_DOOR_NO` |
+| 33 | Entrada (pull-up interno) | Puerta NC | SW1.**NC** (la misma línea va al control GPIO33) | BAJO = contacto cerrado | `PIN_DOOR_NC` |
 | 25 | Salida | **Permiso del PTC** | **RL1.IN** (módulo de 30 A, disparo ALTO, contacto NA en serie con el PTC). Con la opción T2: GPIO25 → TH1 → RL1.IN | **ALTO = permitido** | `PIN_PTC_PERMIT` |
 | 26 | Salida | Permiso de apagado de FAN_P | **RM1 canal 1 (RL3).IN**; contacto NC en paralelo con RL2 del control | **ALTO = se permite apagar** | `PIN_FAN_P_OFF_PERMIT` |
 | 27 | Salida | Forzar FAN_C | **RM1 canal 2 (RL4).IN**; contacto NA en paralelo con la salida de SSR2 | ALTO = forzar encendido | `PIN_FAN_C_FORCE` |
 | 18 | Salida | SPI SCK | M3.SCK | SPI modo 0, 1 MHz | `PIN_SPI_SCK` |
 | 19 | Entrada | SPI MISO | M3.SO | SPI | `PIN_SPI_MISO` |
 | 23 | Salida | CS de TC3 | M3 (MAX6675).CS | BAJO = seleccionado | `PIN_CS_TC3` |
-| 16 | Entrada | UART2 RX ← control | Control **GPIO17 (TX)** | UART 115200 8N1 | `PIN_CTRL_RX` |
-| 17 | Salida | UART2 TX → control | Control **GPIO18 (RX)** | UART | `PIN_CTRL_TX` |
+| 16 | Entrada | UART2 RX ← control | Control **GPIO17 (TX2)** | UART 115200 8N1 | `PIN_CTRL_RX` |
+| 17 | Salida | UART2 TX → control | Control **GPIO16 (RX2)** | UART | `PIN_CTRL_TX` |
 | 4 | Entrada (pull-down interno) | Lectura del termostato | **Sólo con la opción T2**: lado de RL1.IN de TH1 | ALTO = termostato cerrado | `PIN_TH_SENSE` |
 | 2 | Salida | LED de la placa | LED integrado | Estado / falla | `PIN_LED` |
 
@@ -63,7 +63,7 @@ Mientras el ESP32 arranca, GPIO25, 26 y 27 quedan en alta impedancia:
 - RL3 desactivado ⇒ contacto NC cerrado ⇒ **FAN_P encendido**.
 - RL4 desactivado ⇒ FAN_C sin forzar (sigue lo que mande el control).
 
-## 5. `sis_pins.h` (contenido esperado)
+## 5. Constantes en `config.h`
 
 ```cpp
 constexpr int PIN_DOOR_NO          = 32;

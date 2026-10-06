@@ -1,6 +1,6 @@
-# Máquina de estados del ciclo (control, ESP32-S3)
+# Máquina de estados del ciclo (control, ESP32 DevKit V1 de control)
 
-Resumen. Tabla completa con acciones y transiciones en [PLAN-MAESTRO §8.4](PLAN-MAESTRO.md#84-máquina-de-estados). Esta máquina corre en el control (ESP32-S3), que también maneja los ventiladores; el SIS sólo puede vetar el apagado del ventilador del PTC o forzar el de circulación.
+Resumen. Tabla completa con acciones y transiciones en [PLAN-MAESTRO §8.4](PLAN-MAESTRO.md#84-máquina-de-estados). Esta máquina corre en el control (ESP32 DevKit V1 de control), que también maneja los ventiladores; el SIS sólo puede vetar el apagado del ventilador del PTC o forzar el de circulación.
 
 ```mermaid
 stateDiagram-v2
