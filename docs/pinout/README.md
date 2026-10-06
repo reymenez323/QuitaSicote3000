@@ -1,36 +1,36 @@
 # Pinout por controlador
 
-> Regla de máxima prioridad: **control = ESP32-S3, SIS = ESP32 Dev Kit** ([ADR-0012](../decisiones/ADR-0012-regla-mega-control-nano-sis.md)). Sólo módulos y dispositivos ([ADR-0013](../decisiones/ADR-0013-solo-modulos-y-dispositivos.md)).
+> Regla de máxima prioridad: **control y SIS en dos ESP32 DevKit V1 distintos** ([ADR-0012](../decisiones/ADR-0012-regla-mega-control-nano-sis.md)). Sólo módulos y dispositivos ([ADR-0013](../decisiones/ADR-0013-solo-modulos-y-dispositivos.md)).
 
 Un documento independiente por cada controlador:
 
 | Controlador | Nodo | Qué maneja | Documento |
 |---|---|---|---|
-| ESP32-S3 | **Control** | SSR1 (PTC), SSR2 (FAN_C), RL2 (apagar FAN_P), TC1, TC2, SHT31, SGP40, puerta | [control-esp32s3.md](control-esp32s3.md) |
-| ESP32 Dev Kit | **SIS** | RL1 (permiso del PTC), RL3 (veto del apagado de FAN_P), RL4 (forzado de FAN_C), TC3, puerta | [sis-esp32.md](sis-esp32.md) |
+| ESP32 DevKit V1 n.º 1 | **Control** | SSR1 (PTC), SSR2 (FAN_C), RL2 (apagar FAN_P), TC1, TC2, SHT31, SGP40, puerta | [control-esp32.md](control-esp32.md) |
+| ESP32 DevKit V1 n.º 2 | **SIS** | RL1 (permiso del PTC), RL3 (veto del apagado de FAN_P), RL4 (forzado de FAN_C), TC3, puerta | [sis-esp32.md](sis-esp32.md) |
 | ESP32-32E (pantalla 3.2") | HMI | Nada del proceso: pantalla, táctil y enlace | [esp32-hmi.md](esp32-hmi.md) |
 
 Los tres trabajan a **3,3 V**: todos los cables entre ellos son **directos**. Contexto eléctrico completo: [PLAN-MAESTRO §5](../PLAN-MAESTRO.md#5-electrónica).
-Los números de pin se fijarán definitivamente cuando se confirmen los modelos de placa (decisión abierta A-13).
+Las dos placas son del mismo modelo: **etiquetarlas** ("CONTROL" y "SIS"). Usan los mismos números de pin para la puerta, las salidas, el SPI y el UART entre ellas.
 
 ## Cables entre controladores
 
 | Señal | Desde | Hacia |
 |---|---|---|
-| UART control → SIS | ESP32-S3 GPIO17 (TX1) | ESP32 GPIO16 (RX2) |
-| UART SIS → control | ESP32 GPIO17 (TX2) | ESP32-S3 GPIO18 (RX1) |
-| UART control → HMI | ESP32-S3 GPIO15 (TX2) | HMI IO32 (RX2) |
-| UART HMI → control | HMI IO25 (TX2) | ESP32-S3 GPIO16 (RX2) |
-| Puerta NA (compartida) | SW1.NA | ESP32-S3 GPIO4 y ESP32 GPIO32 |
-| Puerta NC (compartida) | SW1.NC | ESP32-S3 GPIO5 y ESP32 GPIO33 |
+| UART control → SIS | Control GPIO17 (TX2) | SIS GPIO16 (RX2) |
+| UART SIS → control | SIS GPIO17 (TX2) | Control GPIO16 (RX2) |
+| UART control → HMI | Control GPIO4 (TX1) | HMI IO32 (RX2) |
+| UART HMI → control | HMI IO25 (TX2) | Control GPIO35 (RX1) |
+| Puerta NA (compartida) | SW1.NA | Control GPIO32 y SIS GPIO32 |
+| Puerta NC (compartida) | SW1.NC | Control GPIO33 y SIS GPIO33 |
 | GND común | GND de las tres placas | Estrella de tierra |
 
 ## Combinación por contactos (no hay cable entre controladores)
 
 | Ventilador | Control | SIS | Combinación |
 |---|---|---|---|
-| FAN_P | RL2 (GPIO21) | RL3 (GPIO26) | Contactos NC en paralelo: se apaga sólo si ambos están energizados |
-| FAN_C | SSR2 (GPIO7) | RL4 (GPIO27) | Contacto NA en paralelo con SSR2: se enciende si cualquiera lo activa |
+| FAN_P | RL2 (GPIO27) | RL3 (GPIO26) | Contactos NC en paralelo: se apaga sólo si ambos están energizados |
+| FAN_C | SSR2 (GPIO26) | RL4 (GPIO27) | Contacto NA en paralelo con SSR2: se enciende si cualquiera lo activa |
 
 ## Polaridades que el firmware debe respetar
 

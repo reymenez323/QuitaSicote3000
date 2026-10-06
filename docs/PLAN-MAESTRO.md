@@ -1,6 +1,6 @@
 # Plan maestro de implementación — QuitaSicote3000
 
-Versión 5 · 2026-09-30 · Electrónica y firmware de todo el sistema.
+Versión 7 · 2026-10-06 · Electrónica y firmware de todo el sistema.
 
 ---
 
@@ -11,9 +11,9 @@ Este documento es la **referencia principal** para implementar el sistema comple
 
 ### 0.2 Regla de máxima prioridad [CONFIRMADO]
 
-> **El control es el ESP32-S3 y el SIS es el ESP32 Dev Kit. Esta separación se mantiene estrictamente en todo el proyecto** ([ADR-0012](decisiones/ADR-0012-regla-mega-control-nano-sis.md)).
+> **El control y el SIS corren en dos ESP32 DevKit V1 distintos (uno para cada uno). Esta separación se mantiene estrictamente en todo el proyecto** ([ADR-0012](decisiones/ADR-0012-regla-mega-control-nano-sis.md)).
 
-- Todo lo que sea **control** (ciclo, perfiles, regulación, ventiladores, sensores de proceso) corre en el **ESP32-S3**.
+- Todo lo que sea **control** (ciclo, perfiles, regulación, ventiladores, sensores de proceso) corre en el **ESP32 DevKit V1 de control**.
 - Todo lo que sea **seguridad** (funciones SIF, permiso del PTC, vetos, forzados, enclavamientos) corre en el **ESP32 Dev Kit**.
 - Si una salida necesita a la vez la orden del control y una condición de seguridad, se combina **por hardware** con **contactos de módulos de relé** (NC en paralelo = AND para apagar; NA en paralelo = OR para encender). **Nunca** se mueve una función de un controlador al otro.
 - El HMI (ESP32-32E) no hace ni control ni seguridad.
@@ -66,8 +66,8 @@ Equipo **doméstico** [CONFIRMADO] que elimina el mal olor del calzado haciendo 
 
 | Nodo | Placa | Función |
 |---|---|---|
-| **Control** | **ESP32-S3** (se asume ESP32-S3-DevKitC-1 [VERIFICAR, A-13]) | Ciclo de tratamiento, sensores de proceso, SSR del PTC y ventiladores |
-| **SIS** | **ESP32 Dev Kit** (ESP32-WROOM-32; se asume DevKitC/DOIT [VERIFICAR, A-13]) | Seguridad independiente: relé de permiso del PTC, relés de veto y forzado de ventiladores, enclavamientos |
+| **Control** | **ESP32 DevKit V1** n.º 1 (DOIT, ESP32-WROOM-32, 30 pines) | Ciclo de tratamiento, sensores de proceso, SSR del PTC y ventiladores |
+| **SIS** | **ESP32 DevKit V1** n.º 2 (mismo modelo, placa distinta) | Seguridad independiente: relé de permiso del PTC, relés de veto y forzado de ventiladores, enclavamientos |
 | **HMI** | ESP32-32E con pantalla 3.2" (E32R32P) | Interfaz táctil; **sólo comunicación**, sin entradas ni salidas de proceso |
 
 Los tres trabajan a **3,3 V**: se conectan entre sí directamente.
@@ -76,12 +76,12 @@ Los tres trabajan a **3,3 V**: se conectan entre sí directamente.
 ```
 Capa 3  Termostato bimetálico 80 °C en serie con el PTC   → hardware puro
 Capa 2  SIS (ESP32 Dev Kit): su termopar y relé de permiso → software mínimo e independiente
-Capa 1  Control (ESP32-S3): límites de proceso sobre el SSR → lógica de proceso
+Capa 1  Control (ESP32 DevKit V1 de control): límites de proceso sobre el SSR → lógica de proceso
 ```
 Cada capa puede apagar el PTC **por sí sola**: TH1 abre el circuito, el SIS abre RL1, el control apaga SSR1.
 
 ### 1.3 Datos confirmados por el usuario (procedencia)
-- **Control = ESP32-S3, SIS = ESP32 Dev Kit, estrictamente** (máxima prioridad). Antes eran Arduino Mega y Nano: se cambiaron.
+- **Control y SIS en dos ESP32 DevKit V1 separados, estrictamente** (máxima prioridad). Antes fueron Arduino Mega y Nano, y después ESP32-S3 y ESP32 Dev Kit: se cambiaron.
 - Producto doméstico; se controla **sólo desde la pantalla**; **no hay botón físico de paro**.
 - La pantalla ESP32-32E sólo se comunica.
 - 3 termopares tipo K con 3 MAX6675; SHT31 (T/HR); SGP40 (VOC).
@@ -102,14 +102,14 @@ Cada capa puede apagar el PTC **por sí sola**: TH1 abre el circuito, el SIS abr
 
 ---
 
-## 2. Estado actual (2026-09-30)
+## 2. Estado actual (2026-10-06)
 
 | Área | Estado |
 |---|---|
 | Documentación de arquitectura | Hecha (este plan + `docs/`) |
-| Código | **No existe**. Carpetas `firmware/*/src` vacías |
-| Plan del HMI | Escrito ([PLAN.md](../firmware/hmi/PLAN.md)), sin empezar |
-| Hardware | Faltan, además de lo de §1.3: ESP32-S3, ESP32 Dev Kit, RL1 (módulo de relé de 30 A), RM1 (módulo de 2 relés), REG_A, REG_B |
+| Código | **Primera versión escrita (2026-10-06)**: protocolo, SIS, control y HMI compilan; sin probar en hardware |
+| Plan del HMI | Pantallas escritas con LVGL 9; faltan las fuentes con acentos y la prueba en la placa |
+| Hardware | Faltan, además de lo de §1.3: los dos ESP32 DevKit V1, RL1 (módulo de relé de 30 A), RM1 (módulo de 2 relés), REG_A, REG_B |
 | Ensayos | Ninguno |
 
 ---
@@ -135,11 +135,12 @@ Detalle en [requisitos.md](requisitos.md). Los que más condicionan el diseño:
 
 | ID | Decisión | Estado |
 |---|---|---|
-| — | **Control = ESP32-S3, SIS = ESP32 Dev Kit, estrictamente** | [CONFIRMADO] ([ADR-0012](decisiones/ADR-0012-regla-mega-control-nano-sis.md), [ADR-0002](decisiones/ADR-0002-mcu-del-sis.md)) |
+| — | **Control y SIS en dos ESP32 DevKit V1 separados, estrictamente** | [CONFIRMADO] ([ADR-0012](decisiones/ADR-0012-regla-mega-control-nano-sis.md), [ADR-0002](decisiones/ADR-0002-mcu-del-sis.md)) |
 | A-1 | El SIS corta el PTC con un **módulo de relé (RL1) en serie** | [DECIDIDO] ([ADR-0010](decisiones/ADR-0010-permiso-ptc-modulo-rele.md)) |
 | A-2 | **Sólo módulos o dispositivos**; sin optoacopladores ni convertidores de nivel | [CONFIRMADO] ([ADR-0013](decisiones/ADR-0013-solo-modulos-y-dispositivos.md)) |
 | A-3 | **Dos reguladores de 5 V** independientes | [CONFIRMADO] |
 | A-9 | Enlaces directos a 3,3 V entre los tres ESP32 | [DECIDIDO] (consecuencia del cambio de controladores) |
+| A-13 | Control y SIS: **ESP32 DevKit V1** (uno cada uno) | [CONFIRMADO] 2026-10-06 |
 | A-10 | **Sin fusibles ni caja de fusibles**: la única protección contra cortocircuitos es la de la propia fuente | [CONFIRMADO]; riesgo aceptado (§13) |
 
 ### 4.2 Abiertas
@@ -148,7 +149,6 @@ Detalle en [requisitos.md](requisitos.md). Los que más condicionan el diseño:
 |---|---|---|---|---|
 | **A-11** | **Dónde cablear el termostato bimetálico** (TH1, 2 cables) | **T1**: en serie con los 12 V del PTC (barrera independiente de todo, pero el SIS no puede leerlo). **T2**: en serie con la señal de 3,3 V del SIS hacia RL1, leído por un pin del SIS (se puede leer y enclavar, pero si RL1 se suelda el termostato ya no corta). Detalle en [ADR-0008](decisiones/ADR-0008-termostato-rearme-automatico.md) | **T1**, con el bloqueo tras 2 eventos aplicado a los eventos térmicos que el SIS detecta (SIF-01, SIF-03, SIF-08) | F3, F4 |
 | **A-12** | ¿Recuperar la lectura de los nodos de 12 V con un **módulo sensor de voltaje** (0–25 V, salida analógica)? Permitiría leer el termostato, el contacto de RL1, un SSR1 en corto y la tensión del ventilador del PTC | Sí / no | Opcional; recomendable si se acepta ese tipo de módulo | F3 |
-| **A-13** | Modelos exactos de las placas ESP32-S3 y ESP32 Dev Kit | — | Necesario para fijar los pines definitivos | F0 |
 | **A-4** | Si el SIS deja de recibir al control con el permiso concedido, ¿disparo enclavado o sólo retirar el permiso? | — | Disparo enclavado | F4 |
 | **A-5** | Procedimiento de servicio tras el bloqueo | Ver §7.9 | Comando por USB del control + secuencia de puerta | F4 |
 | **A-6** | ¿VOC/HR como criterio de fin anticipado? | Sí / no / sólo informativo | Sólo informativo hasta tener datos | F9 |
@@ -175,14 +175,14 @@ Detalle en [requisitos.md](requisitos.md). Los que más condicionan el diseño:
 | FAN_P | Ventilador del PTC (12 V, 2 cables) | [CONFIRMADO] |
 | FAN_C | Ventilador de circulación (12 V, 2 cables) | [CONFIRMADO] |
 | FAN_B | Ventilador de la cámara de circuitos (12 V, 2 cables) | [CONFIRMADO] |
-| REG_A | Módulo regulador conmutado (buck) 12 → 5 V, ≥ 2 A: lado control (ESP32-S3 + HMI) | [CONFIRMADO]; especificación [PROPUESTA] |
+| REG_A | Módulo regulador conmutado (buck) 12 → 5 V, ≥ 2 A: lado control (ESP32 DevKit V1 de control + HMI) | [CONFIRMADO]; especificación [PROPUESTA] |
 | REG_B | Módulo regulador conmutado 12 → 5 V, ≥ 1 A: lado SIS | [CONFIRMADO]; especificación [PROPUESTA] |
 | SW1 | Limit switch de puerta SPDT (COM, NA, NC) | [CONFIRMADO] |
 | TC1–TC3 + M1–M3 | Termopar K + módulo MAX6675 (alimentado a 3,3 V) | [CONFIRMADO] |
 | S1 | Módulo SHT31 (I2C 0x44), alimentado a 3,3 V | [CONFIRMADO] |
 | S2 | Módulo SGP40 (I2C 0x59), alimentado a 3,3 V | [CONFIRMADO] |
-| MCU_C | ESP32-S3 (control) | [CONFIRMADO]; modelo [ABIERTO A-13] |
-| MCU_S | ESP32 Dev Kit (SIS) | [CONFIRMADO]; modelo [ABIERTO A-13] |
+| MCU_C | ESP32 DevKit V1 n.º 1 (control) | [CONFIRMADO] |
+| MCU_S | ESP32 DevKit V1 n.º 2 (SIS) | [CONFIRMADO] |
 | HMI | Placa ESP32-32E 3.2" | [CONFIRMADO] |
 
 ### 5.1 Presupuesto de corriente (12 V)
@@ -193,7 +193,7 @@ Detalle en [requisitos.md](requisitos.md). Los que más condicionan el diseño:
 | PTC en el arranque | Mayor: un PTC frío tiene menos resistencia | [POR MEDIR] F7 |
 | FAN_P, FAN_C, FAN_B | ≈ 0,1–0,5 A cada uno | [POR MEDIR] |
 | Bobinas de RL1, RL2, RL3, RL4 | ≈ 0,07–0,2 A cada una | [VERIFICAR] modelo |
-| Lógica a 5 V (ESP32-S3, ESP32, HMI con retroiluminación, sensores) | ≈ 0,7 A a 5 V ⇒ ≈ 0,35 A a 12 V | Estimado (radios apagadas) |
+| Lógica a 5 V (ESP32 DevKit V1 de control, ESP32, HMI con retroiluminación, sensores) | ≈ 0,7 A a 5 V ⇒ ≈ 0,35 A a 12 V | Estimado (radios apagadas) |
 | **Total** | **≈ 10 A en régimen** | La fuente de 20 A tiene margen |
 
 ### 5.2 Distribución de potencia
@@ -210,10 +210,10 @@ PSU 12 V ─ J1 ─┬─ TH1 ── RL1 (COM→NA) ── PTC(+)   PTC(−) ─
                ├─ FAN_B(+)   FAN_B(−) ── GND                             (siempre encendido)
                ├─ VCC de RL1, RL2 y RM1 (bobinas de 12 V)
                │
-               ├─ REG_A ── 5V_A ──► ESP32-S3 (pin 5V), HMI (USB-C)
+               ├─ REG_A ── 5V_A ──► ESP32 DevKit V1 de control (pin 5V), HMI (USB-C)
                └─ REG_B ── 5V_B ──► ESP32 Dev Kit (pin 5V/VIN)
 
-3V3 del ESP32-S3 ──► M1, M2 (MAX6675), S1 (SHT31), S2 (SGP40)
+3V3 del ESP32 DevKit V1 de control ──► M1, M2 (MAX6675), S1 (SHT31), S2 (SGP40)
 3V3 del ESP32 Dev Kit ──► M3 (MAX6675)
 ```
 
@@ -240,7 +240,7 @@ Notas:
 
 ### 5.4 Ventiladores
 
-| Ventilador | Lo maneja el control (ESP32-S3) | Intervención del SIS (ESP32 Dev Kit) | Combinación | Reposo / falla |
+| Ventilador | Lo maneja el control (ESP32 DevKit V1 de control) | Intervención del SIS (ESP32 Dev Kit) | Combinación | Reposo / falla |
 |---|---|---|---|---|
 | FAN_P (PTC) | RL2, **ALTO = pedir apagado** | RL3, **ALTO = permitir apagado** | Contactos **NC en paralelo**: se apaga sólo si RL2 **y** RL3 están energizados | Cualquier controlador sin alimentación o arrancando ⇒ su relé sin energizar ⇒ **encendido** |
 | FAN_C (circulación) | SSR2, ALTO = encender | RL4, **ALTO = forzar encendido** | Contacto NA de RL4 **en paralelo** con la salida de SSR2 | Sin señales ⇒ apagado |
@@ -285,11 +285,11 @@ Los tres controladores trabajan a 3,3 V: **conexión directa**, sin convertidore
 
 | Enlace | Conexión |
 |---|---|
-| Control ↔ SIS | UART1 del ESP32-S3 ↔ UART2 del ESP32 Dev Kit (TX ↔ RX cruzados) |
-| Control ↔ HMI | UART2 del ESP32-S3 ↔ UART2 del HMI, reasignado a IO25 (TX) / IO32 (RX) en el conector I2C de la placa |
+| Control ↔ SIS | UART2 del control ↔ UART2 del SIS (GPIO17 TX ↔ GPIO16 RX, cruzados) |
+| Control ↔ HMI | UART1 del control (reasignado a GPIO4 TX / GPIO35 RX) ↔ UART2 del HMI, reasignado a IO25 (TX) / IO32 (RX) en el conector I2C de la placa |
 
 Números de pin exactos: [pinout/](pinout/README.md). Velocidad: **115200 baudios 8N1** en ambos enlaces. GND común entre los tres nodos (obligatorio).
-Depuración: USB de cada placa (en el ESP32-S3, el USB nativo; en el ESP32 Dev Kit y el HMI, UART0 por su conversor USB).
+Depuración: USB de cada placa (UART0 por su conversor USB).
 
 ### 5.8 Asignación de pines
 
@@ -297,12 +297,12 @@ Cada controlador tiene su propio documento, con todos los pines, a qué terminal
 
 | Controlador | Documento |
 |---|---|
-| ESP32-S3 (control) | [pinout/control-esp32s3.md](pinout/control-esp32s3.md) |
-| ESP32 Dev Kit (SIS) | [pinout/sis-esp32.md](pinout/sis-esp32.md) |
+| ESP32 DevKit V1 (control) | [pinout/control-esp32.md](pinout/control-esp32.md) |
+| ESP32 DevKit V1 (SIS) | [pinout/sis-esp32.md](pinout/sis-esp32.md) |
 | ESP32-32E (HMI) | [pinout/esp32-hmi.md](pinout/esp32-hmi.md) |
 | Cables entre controladores y polaridades | [pinout/README.md](pinout/README.md) |
 
-Esos documentos son la **única fuente** de números de pin. Se fijarán definitivamente cuando se confirmen los modelos de placa (A-13).
+Esos documentos son la **única fuente** de números de pin.
 
 ### 5.9 Tierra, cableado y ruido
 - **Tierra en estrella** en el negativo de la fuente. Retornos separados para: rama del PTC, ventiladores, REG_A, REG_B. Los 8 A del PTC no comparten cable con la lógica.
@@ -340,32 +340,19 @@ Esos documentos son la **única fuente** de números de pin. Se fijarán definit
 ### 6.1 Herramientas y estructura
 
 - **PlatformIO**, framework **Arduino-ESP32** en los tres, con versión de plataforma **fijada**.
-- Código compartido en C++17; sin excepciones ni RTTI en el SIS.
+- **Toda la lógica corre en tareas de FreeRTOS** [CONFIRMADO, 2026-10-06]. En cada nodo las tareas comparten unas pocas variables protegidas por un mutex; los encargos entre tareas van por colas.
+- **Pocos archivos y máxima legibilidad** [CONFIRMADO, 2026-10-06]: un `main.cpp` por nodo, leído de arriba abajo, más un `config.h` con todo lo ajustable. Sin capas ni bibliotecas propias.
 
 ```
 firmware/
-├─ compartido/
-│  └─ protocolo/
-│     ├─ library.json
-│     └─ src/
-│        ├─ qs_ids.h          enums compartidos (estados, fallas, perfiles, bits)
-│        ├─ qs_protocol.h     tipos de mensaje, estructuras, tamaños
-│        └─ qs_protocol.cpp   CRC16, codificación, parser con resincronización
-├─ control/                   ESP32-S3: platformio.ini, src/, lib/, test/
-├─ sis/                       ESP32 Dev Kit: platformio.ini, src/, lib/, test/
-└─ hmi/                       ESP32-32E: platformio.ini, include/lv_conf.h, src/
+├─ compartido/qs_protocol.h   identificadores, mensajes y tramas (lo incluyen los tres)
+├─ sis/src/                   config.h · main.cpp
+├─ control/src/               config.h · sensors.h · main.cpp
+└─ hmi/                       include/lv_conf.h · src/ display.h · ui.h · ui.cpp · main.cpp
 ```
 
-- Cada `platformio.ini` incluye `lib_extra_dirs = ../compartido`.
-- **La lógica pura vive en `lib/`** (sin `#include <Arduino.h>`), y `src/` sólo contiene la unión con el hardware. Así la lógica se prueba en PC con `pio test -e native` (Unity).
-
-| Proyecto | Entornos |
-|---|---|
-| control | `esp32-s3-devkitc-1` (ajustar al modelo, A-13), `native` |
-| sis | `esp32dev`, `native` |
-| hmi | `esp32dev` |
-
-**CI [PROPUESTA]**: `.github/workflows/ci.yml` que compila los tres proyectos y ejecuta los tests `native` en cada push.
+- Cada `platformio.ini` tiene un único entorno e incluye `-I ../compartido`.
+- No hay pruebas automáticas en PC (la lógica vive en las tareas): la validación es en banco, por inyección de fallas ([seguridad-sis.md](seguridad-sis.md)).
 
 ### 6.2 Unidades y representación
 
@@ -432,7 +419,7 @@ El SIS usa **aritmética entera**. El control puede usar `float` en el PID y en 
 | 0x12 | `REQ_PAUSE` | HMI → Control | evento | — |
 | 0x13 | `REQ_RESUME` | HMI → Control | evento | — |
 | 0x14 | `REQ_CANCEL` | HMI → Control | evento | — |
-| 0x15 | `REQ_ACK` | HMI → Control | evento | `u8 fault_code` (0 = aceptar "Completo") |
+| 0x15 | `REQ_ACK` | HMI → Control | evento | — (acepta "Completo" o la falla mostrada) |
 | 0x16 | `REQ_REARM` | HMI → Control | evento | — (el control lo traduce a `REQ_RESET`) |
 | 0x20 | `STATUS` | Control → HMI | 200 ms | ver abajo (28 bytes) |
 | 0x21 | `RESP_START` | Control → HMI | evento | `u8 result`: 0 OK, 1 PUERTA_ABIERTA, 2 NO_LISTO, 3 ID_INVALIDO, 4 FALLA_ACTIVA |
@@ -497,39 +484,26 @@ Perfiles: `shoe_id` 0 Cuero, 1 Deportivo, 2 Bota, 3 Sintético · `intensity_id`
 ### 7.1 Principios
 - Sólo funciones de seguridad (§0.2).
 - **Wi-Fi y Bluetooth apagados** desde el arranque.
-- Un único lazo cíclico de **10 ms** (en `loop()`), sin tareas propias adicionales.
-- **Task Watchdog** suscrito a la tarea del lazo, con 1 s de tiempo; detector de caída de tensión (*brownout*) activo.
+- Tres tareas de FreeRTOS (§7.3). La de seguridad corre cada **10 ms** con la prioridad más alta.
+- **Task Watchdog** suscrito a la tarea de seguridad, con 1 s de tiempo; detector de caída de tensión (*brownout*) activo.
 - Sin bibliotecas de terceros; MAX6675 por SPI del hardware; UART2 con `HardwareSerial`.
 - Sin asignación dinámica después del arranque; sin `String`.
-- Umbrales en `src/config/sis_params.h` como `constexpr`. **Ninguno se recibe por la comunicación.**
+- Umbrales en `src/config.h` como `constexpr`. **Ninguno se recibe por la comunicación.**
 - **La comunicación sólo puede restringir**: un dato del control puede retirar un permiso o provocar un disparo; nunca concede nada.
 
-### 7.2 Módulos
-```
-sis/
-├─ lib/sis_logic/          lógica pura, probada en PC
-│  ├─ door.h/.cpp          interpretación NA/NC + antirrebote
-│  ├─ tc_validator.h/.cpp  validez de TC3 (abierto, rango, congelado)
-│  ├─ trend.h/.cpp         pendiente de TC3 y "calentamiento sin efecto"
-│  ├─ sif.h/.cpp           evaluación de las SIF y de las salidas
-│  ├─ sis_fsm.h/.cpp       ARRANQUE / OK / DISPARADO / BLOQUEADO
-│  └─ persist.h/.cpp       formato persistente + CRC (con interfaz de almacenamiento simulable)
-└─ src/
-   ├─ main.cpp             lazo, watchdog, radios apagadas
-   ├─ hw_io.cpp            puerta y salidas (RL1, RL3, RL4)
-   ├─ hw_max6675.cpp       SPI
-   ├─ hw_store.cpp         implementación sobre NVS (Preferences)
-   ├─ link.cpp             HB_SIS, recepción de HB_CTRL / REQ_*
-   └─ config/sis_params.h, sis_pins.h
-```
+### 7.2 Archivos
 
-### 7.3 Planificación del lazo
+`sis/src/config.h` (pines y umbrales) y `sis/src/main.cpp`, organizado en secciones: estado compartido → memoria no volátil → disparo, rearme y servicio → funciones de seguridad → tareas → arranque.
 
-| Periodo | Tarea |
-|---|---|
-| 10 ms | Leer la puerta, procesar bytes del UART, evaluar las SIF, actualizar salidas, alimentar el watchdog |
-| 100 ms | Enviar `HB_SIS`; registrar `ssr1_cmd` para la estadística de SIF-08 |
-| 250 ms | Leer TC3; actualizar la ventana de pendiente |
+### 7.3 Tareas
+
+| Tarea | Periodo | Qué hace |
+|---|---|---|
+| `taskSafety` (prioridad 5) | 10 ms | Leer la puerta, evaluar las SIF, escribir RL1/RL3/RL4, alimentar el watchdog |
+| `taskThermocouple` (4) | 250 ms | Leer TC3, validarlo y guardar el historial de 10 s |
+| `taskLink` (3) | 10 ms | Recibir `HB_CTRL` / `REQ_*`; enviar `HB_SIS` (cada 100 ms) y los `EVENT`; guardar en NVS |
+
+La escritura en NVS la hace `taskLink`, no la tarea de seguridad: un corte nunca espera a la flash.
 
 Tiempo de respuesta esperado puerta → RL1 abierto: antirrebote (30 ms) + un ciclo (10 ms) + liberación del relé (≈ 10 ms) ≈ **50 ms** (requisito < 200 ms).
 
@@ -563,9 +537,10 @@ SIF-05  (retirada: no hay realimentación eléctrica, ADR-0013)
 SIF-06  !hb_ok && permit                                            → disparo [ABIERTO A-4]
 SIF-07  permit continuo > SIF07_MAX_HEAT_MIN                        → disparo
         (el contador se reinicia sólo tras SIF07_COOL_OFF_MIN con el permiso retirado)
-SIF-08  T1: "calentamiento sin efecto" (posible termostato abierto):
-          permit && ssr1_cmd == 1 en >= SIF08_DUTY_PCT % de los HB de los últimos SIF08_WINDOW_S
-          && tc3 bajó >= SIF08_DROP_Q2 en esa ventana                → disparo, evento térmico [POR MEDIR]
+SIF-08  T1: "calentamiento sin efecto" (posible termostato abierto), evaluado en ventanas
+          consecutivas de SIF08_WINDOW_MS con el permiso concedido:
+          ssr1_cmd == 1 en >= SIF08_MIN_DUTY_PCT % de los HB de la ventana
+          && tc3 bajó >= SIF08_DROP_Q2 entre el principio y el final                → disparo, evento térmico [POR MEDIR]
         T2: termostato leído abierto con el permiso ordenado        → disparo, evento térmico
 ```
 
@@ -632,46 +607,31 @@ Desbloquear exige **presencia física**:
 
 ---
 
-## 8. Firmware de control (ESP32-S3)
+## 8. Firmware de control (ESP32 DevKit V1 de control)
 
 ### 8.1 Principios
 - Sólo funciones de control (§0.2). Sus límites de software son de proceso (capa 1), no funciones SIF.
 - Wi-Fi y Bluetooth apagados (no se usan).
-- Planificador cooperativo en `loop()` con `millis()`; ninguna tarea bloquea más de 5 ms; sin `delay()`.
+- Cinco tareas de FreeRTOS (§8.3). Las lecturas lentas (I2C) viven en la tarea de sensores, nunca en la del ciclo.
 - **Task Watchdog** activo.
-- Cada lectura con calidad: VÁLIDA, OBSOLETA (sin actualizar en 3 periodos) o FALLA.
+- Cada lectura lleva validez: una lectura mala suelta se tolera; tres seguidas dejan el sensor como inválido.
 - Maneja SSR1, SSR2 (FAN_C) y RL2 (orden de apagar FAN_P). El SIS puede forzar o vetar los ventiladores con sus propios relés (RL3, RL4); el control lo ve en `HB_SIS`.
 
-### 8.2 Módulos
-```
-control/
-├─ lib/ctrl_logic/           lógica pura, probada en PC
-│  ├─ cycle_fsm.h/.cpp       máquina de estados (§8.4)
-│  ├─ profiles.h/.cpp        tabla de perfiles (§8.5)
-│  ├─ heat_ctrl.h/.cpp       histéresis / PI + ventana proporcional
-│  ├─ fans.h/.cpp            cuándo encender FAN_C y pedir el apagado de FAN_P
-│  ├─ faults.h/.cpp          clasificación y prioridad de fallas
-│  └─ door.h/.cpp            misma lógica NA/NC que el SIS
-└─ src/
-   ├─ main.cpp, scheduler.cpp
-   ├─ sensors/  max6675.cpp, sht31.cpp, sgp40.cpp (+ algoritmo de índice VOC), door_hw.cpp
-   ├─ actuators/ ssr1.cpp, fan_c.cpp, fan_p.cpp
-   ├─ links/    sis_link.cpp, hmi_link.cpp
-   ├─ console/  service_console.cpp, csv_log.cpp
-   └─ config/   ctrl_params.h, ctrl_pins.h
-```
+### 8.2 Archivos
 
-### 8.3 Planificación
+`control/src/config.h` (pines, parámetros y tabla de perfiles), `control/src/sensors.h` (MAX6675, SHT31, SGP40) y `control/src/main.cpp`, organizado en secciones: estado compartido → fallas → solicitudes del HMI → máquina de estados → calefactor y ventiladores → tareas → arranque.
 
-| Periodo | Tarea |
-|---|---|
-| 10 ms | UART (ambos enlaces), puerta con antirrebote de 30 ms |
-| 100 ms | `HB_CTRL`; salidas; ventana del SSR1 |
-| 200 ms | `STATUS` al HMI |
-| 250 ms | Leer un MAX6675, alternando TC1 y TC2 (cada uno cada 500 ms) |
-| 1 s | SHT31 (ordenar la medición en un tick y leerla en el siguiente), SGP40 (medición compensada con T/HR del SHT31) + algoritmo de índice VOC, control de temperatura, temporizadores del ciclo, línea CSV |
+### 8.3 Tareas
 
-Bibliotecas sugeridas: Sensirion "I2C SGP40" y "Gas Index Algorithm"; SHT31 de Sensirion o Adafruit. El índice VOC necesita muestras regulares a 1 Hz y tiene un periodo inicial de aprendizaje (`warn_flags` b2).
+| Tarea | Periodo | Qué hace |
+|---|---|---|
+| `taskCycle` (prioridad 5) | 10 ms | Puerta con antirrebote, máquina de estados, SSR1 y ventiladores, watchdog |
+| `taskSisLink` (4) | 10 ms | Recibir `HB_SIS` y `EVENT`; enviar `HB_CTRL` (cada 100 ms), rearmes y servicio |
+| `taskHmiLink` (3) | 10 ms | Recibir las solicitudes del HMI; enviar `STATUS` (cada 200 ms) |
+| `taskSensors` (2) | 250 ms | Un MAX6675 por vuelta, alternando TC1 y TC2; cada segundo, SHT31 y SGP40 + índice VOC |
+| `taskConsole` (1) | 100 ms | Comandos por USB; línea CSV cada segundo |
+
+Bibliotecas: sólo "Gas Index Algorithm" de Sensirion; el SHT31 y el SGP40 se leen directamente por I2C (`sensors.h`). El índice VOC necesita muestras regulares a 1 Hz y tiene un periodo inicial de aprendizaje (`warn_flags` b2).
 
 ### 8.4 Máquina de estados
 
@@ -715,11 +675,11 @@ Duración del tratamiento: Corta 20 min, Media 40 min, Larga 70 min. Tope global
 - **FAN_P**: nunca pedir su apagado con `heat_request = 1`, SSR1 activo o TC2 ≥ T_FRIO.
 - La salida de SSR1 sólo se activa con `heat_request = 1`, la puerta cerrada y `HB_SIS` indicando permiso concedido (`io_flags` b2).
 
-### 8.7 Consola de servicio y registro (USB nativo del ESP32-S3)
-- **CSV a 1 Hz** durante los ciclos (y siempre en las compilaciones de ensayo):
-  `t_ms,state,sp,tc1,tc2,tc3,rh,voc,duty,ssr1,permit,fan_c,fan_p,door,sis_state,trip_mask,fault`
+### 8.7 Consola de servicio y registro (USB de la placa de control, UART0)
+- **CSV a 1 Hz** durante los ciclos (o siempre, con `log on`):
+  `t_ms,state,sp,tc1,tc2,tc3,rh,voc,ssr1,permit,fan_c,fan_p_off,door,sis_state,trip_mask,fault`
 - Comandos de texto: `status`, `log on|off`, `servicio desbloquear` (§7.9).
-- **Sólo con la bandera de compilación `QS_TEST_BUILD`**: `duty <0-100>` (control manual para los ensayos de F7) y `hmi <comando>` (simular el HMI sin pantalla). **Nunca** en la compilación de uso.
+- Pendiente para F7: comando `duty <0-100>` de control manual, sólo en una compilación de ensayo.
 
 ---
 
@@ -728,8 +688,8 @@ Duración del tratamiento: Corta 20 min, Media 40 min, Larga 70 min. Tope global
 Plan detallado: [firmware/hmi/PLAN.md](../firmware/hmi/PLAN.md). Resumen:
 - LVGL 9 + LovyanGFX, PlatformIO, pantalla en horizontal (320 × 240).
 - Zonas táctiles ≥ 56 px (≈ 11 mm); texto ≥ 20 px; fuentes generadas con acentos.
-- Primero, un prototipo con **simulador del control** (`mock_link`); después, `uart_link` con el protocolo de §6.
-- **Enlace**: UART2 reasignado a IO25 (TX) / IO32 (RX), `Serial2.begin(115200, SERIAL_8N1, 32, 25)`. Conexión directa al ESP32-S3 (ambos a 3,3 V).
+- Dos tareas de FreeRTOS: `taskUi` (LVGL) y `taskLink` (protocolo de §6). El simulador del control previsto en PLAN.md no se implementó: la pantalla se prueba con el control real.
+- **Enlace**: UART2 reasignado a IO25 (TX) / IO32 (RX), `Serial2.begin(115200, SERIAL_8N1, 32, 25)`. Conexión directa al ESP32 DevKit V1 de control (ambos a 3,3 V).
 - Pantallas a partir de `STATUS`: `cycle_state` decide la pantalla; `sis_state == BLOQUEADO` ⇒ "Equipo bloqueado"; evento térmico (`trip_mask` b0, b2 o b7) ⇒ "Se detectó sobrecalentamiento. Revisa los ventiladores" con el botón Rearmar; `fault_code` ⇒ textos de §6.5.
 - Sin `STATUS` > 2 s ⇒ "Sin comunicación".
 - `HMI_HB` cada 500 ms.
@@ -738,7 +698,9 @@ Plan detallado: [firmware/hmi/PLAN.md](../firmware/hmi/PLAN.md). Resumen:
 
 ## 10. Fases de implementación
 
-Estado de todas las fases: **pendiente** (actualizar aquí).
+Estado (2026-10-06): **código de los tres nodos escrito con FreeRTOS; compila; sin probar en hardware.** Siguiente paso: F3 (electrónica de banco) y la puesta en marcha de cada placa. Las fases de abajo se escribieron para la estructura anterior (lógica en `lib/` con pruebas en PC): donde digan "tests `native`" o "lógica en PC", léase "prueba en banco".
+
+Decisiones abiertas aplicadas en el código con la opción recomendada (cambiar si el usuario decide otra cosa): A-4 disparo enclavado (SIF-06), A-5 servicio por consola + 3 aperturas de puerta, A-7 CSV por USB, A-8 nombres propuestos, A-11 opción T1 (el SIS no lee el termostato).
 
 ```mermaid
 flowchart LR
@@ -747,7 +709,7 @@ flowchart LR
   F0 --> F3[F3 Electrónica de banco]
   F2 --> F4[F4 Firmware SIS - ESP32 Dev Kit]
   F3 --> F4
-  F2 --> F5[F5 Firmware control - ESP32-S3]
+  F2 --> F5[F5 Firmware control - ESP32 DevKit V1 de control]
   F3 --> F5
   F1 --> F6[F6 Integración de los 3 nodos]
   F4 --> F6
@@ -761,9 +723,8 @@ flowchart LR
 F1, F2 y F3 pueden avanzar en paralelo.
 
 ### F0 — Base del repositorio
-- **Depende de**: A-13 (modelos de placa).
-- **Tareas**: `platformio.ini` de los tres proyectos con versiones fijadas; `library.json` de `compartido/protocolo`; carpetas `lib/` de lógica; `sis_params.h`, `ctrl_params.h` con los nombres de §12; workflow de CI; `.clang-format`.
-- **Hecho cuando**: `pio run` compila los tres proyectos (vacíos) y `pio test -e native` se ejecuta en control y sis, en local y en CI.
+- **Tareas**: `platformio.ini` de los tres proyectos con versiones fijadas; `compartido/qs_protocol.h`; `config.h` de cada nodo.
+- **Hecho cuando**: `pio run` compila los tres proyectos. **Hecho.**
 
 ### F1 — Prototipo del HMI
 - **Tareas**: fases F0–F7 de [PLAN.md](../firmware/hmi/PLAN.md).
@@ -772,11 +733,11 @@ F1, F2 y F3 pueden avanzar en paralelo.
 
 ### F2 — Biblioteca de protocolo
 - **Tareas**: enums (§6.5), estructuras (§6.4), CRC16 con su vector, codificador, parser con resincronización, contadores de error.
-- **Pruebas `native`**: tramas válidas de cada tipo; CRC erróneo; LEN > 32; basura antes del SOF; trama partida en varios bloques; dos tramas pegadas; `0xAA` dentro del payload; secuencia aleatoria de 10 000 bytes sin bloquear el parser.
+- **Comprobación**: en banco, con los dos enlaces conectados (los latidos llegan y un cable flojo no cuelga ningún nodo).
 - **Hecho cuando**: todas las pruebas pasan.
 
 ### F3 — Electrónica de banco (sin PTC)
-- **Depende de**: A-11, A-12, A-13.
+- **Depende de**: A-11, A-12.
 - **Tareas**:
   1. Montar la distribución de §5.2 con **carga ficticia** en lugar del PTC: lámpara automotriz de 12 V/21 W o resistencia de potencia (carga de ensayo, no parte del equipo).
   2. Ajustar REG_A y REG_B a 5,0–5,1 V antes de conectar placas.
@@ -795,9 +756,9 @@ F1, F2 y F3 pueden avanzar en paralelo.
 - **F4a, lógica en PC**: cada SIF con casos que disparan y que no; las 4 combinaciones de la puerta y el antirrebote; TC congelado; pendiente y "calentamiento sin efecto"; persistencia (formato, CRC, 1.er y 2.º evento, corrupción); rearme aceptado y rechazado; "la comunicación sólo restringe" (ningún `HB_CTRL` concede el permiso con condiciones inseguras).
 - **F4b, drivers**: MAX6675, salidas, watchdog, NVS, enlace, radios apagadas.
 - **F4c, banco**: con RL1, RM1 reales y carga ficticia; medir el tiempo puerta → RL1 con osciloscopio o analizador lógico.
-- **Hecho cuando**: tests `native` en verde; respuesta de la puerta < 200 ms medida; el watchdog reinicia ante un bucle infinito forzado (en compilación de prueba).
+- **Hecho cuando**: respuesta de la puerta < 200 ms medida; el watchdog reinicia ante un bucle infinito forzado (en compilación de prueba).
 
-### F5 — Firmware de control (ESP32-S3)
+### F5 — Firmware de control (ESP32 DevKit V1 de control)
 - **Depende de**: F2, F3, A-7.
 - **F5a**: planificador, drivers de sensores, CSV por USB. Lecturas estables durante 1 h.
 - **F5b, lógica en PC**: todas las transiciones de §8.4; pausa de 5 min; tope de 120 min; corte de energía en cada estado; perfiles e ids fuera de rango; prioridad de fallas; reglas de ventiladores.
@@ -806,11 +767,11 @@ F1, F2 y F3 pueden avanzar en paralelo.
 - **Hecho cuando**: un ciclo completo con carga ficticia recorre todos los estados y las fallas inyectadas se manejan como en §8.4.
 
 ### F6 — Integración de los tres nodos
-- **Tareas**: `uart_link` en el HMI sustituye a `mock_link`; cableado de §5.7; pruebas de pérdida de cada enlace (desconectar cables durante el ciclo).
+- **Tareas**: cableado de §5.7; pruebas de pérdida de cada enlace (desconectar cables durante el ciclo).
 - **Hecho cuando**: un ciclo se controla entero desde la pantalla con carga ficticia y cada pérdida de enlace produce la reacción de §5.10.
 
 ### F7 — Integración de potencia y caracterización (con PTC real, sin calzado)
-- **Seguridad durante los ensayos**: siempre con supervisión; PTC sobre superficie no inflamable; extintor a mano; compilación `QS_TEST_BUILD` con `duty` limitado; `T_SIS_MAX` provisional bajo (55 °C) hasta conocer las temperaturas normales.
+- **Seguridad durante los ensayos**: siempre con supervisión; PTC sobre superficie no inflamable; extintor a mano; ciclo de trabajo limitado (comando `duty`, pendiente de escribir); `T_SIS_MAX` provisional bajo (55 °C) hasta conocer las temperaturas normales.
 - **Mediciones**:
   1. Corriente de arranque del PTC (pinza DC o shunt + osciloscopio) y si la fuente de 20 A la soporta; decidir el arranque suave.
   2. Temperatura de RL1, TH1 y SSR1 a 8,3 A durante 30 min.
@@ -839,7 +800,6 @@ F1, F2 y F3 pueden avanzar en paralelo.
 
 | Nivel | Qué | Dónde | Fase |
 |---|---|---|---|
-| Unitarias | Protocolo, SIF, máquina de estados, perfiles, puerta | PC (`native`) | F2, F4, F5 |
 | HMI | Pantallas con simulador | ESP32-32E | F1 |
 | Banco eléctrico | Reguladores, activación con 3,3 V, estado con la entrada al aire, lógica de contactos | Banco | F3 |
 | Integración | Enlaces y fallas de enlace | Banco | F6 |
@@ -869,7 +829,7 @@ Los nombres son los que debe usar el código.
 | `HMI_HB_PERIOD_MS` | 500 | [PROPUESTA] |
 | `HMI_LINK_TIMEOUT_MS` (lo usa el control) | 10000 | [PROPUESTA] |
 
-**SIS (`sis_params.h`)**
+**SIS (`sis/src/config.h`)** — el código usa estos valores; algunos nombres se abreviaron o llevan la unidad en el nombre (`_MS`, `_Q2`)
 
 | Constante | Valor | Estado |
 |---|---|---|
@@ -891,7 +851,7 @@ Los nombres son los que debe usar el código.
 | `THERMAL_EVENTS_LOCKOUT` | 2 | [DECIDIDO] |
 | `SERVICE_DOOR_TOGGLES` / `SERVICE_WINDOW_MS` | 3 / 30000 | [ABIERTO A-5] |
 
-**Control (`ctrl_params.h`)**
+**Control (`control/src/config.h`)** — ídem (`_MS`, `_X10`)
 
 | Constante | Valor | Estado |
 |---|---|---|
@@ -939,10 +899,10 @@ Los nombres son los que debe usar el código.
 
 | ADR | Decisión | Estado |
 |---|---|---|
-| **0012** | **Control y SIS en controladores separados, estrictamente** (hoy: ESP32-S3 y ESP32 Dev Kit) | [CONFIRMADO], prioridad máxima |
+| **0012** | **Control y SIS en controladores separados, estrictamente** (hoy: ESP32 DevKit V1 de control y ESP32 Dev Kit) | [CONFIRMADO], prioridad máxima |
 | **0013** | **Sólo módulos y dispositivos**; sin optoacopladores, convertidores de nivel ni fusibles | [CONFIRMADO] |
 | 0001 | Control y SIS en MCU independientes | [DECIDIDO] |
-| 0002 | Control en ESP32-S3, SIS en ESP32 Dev Kit | [CONFIRMADO] |
+| 0002 | Control en ESP32 DevKit V1 de control, SIS en ESP32 Dev Kit | [CONFIRMADO] |
 | 0003 | (Retirada; reemplazada por la 0010) | — |
 | 0004 | TC1/TC2 al control, TC3 exclusivo del SIS | [PROPUESTA] |
 | 0005 | Pantalla ESP32 como nodo HMI sólo de comunicación | [CONFIRMADO] |
@@ -964,3 +924,5 @@ Los nombres son los que debe usar el código.
 | 2026-09-30 | 3 | Regla de máxima prioridad control/SIS; vuelven compuertas, divisores y fusibles |
 | 2026-09-30 | 4 | Sólo módulos: contactos de relé en lugar de compuertas; optoacoplador; convertidor de nivel; sin fusibles |
 | 2026-09-30 | 5 | **Cambio de controladores: control = ESP32-S3, SIS = ESP32 Dev Kit.** Todo a 3,3 V: enlaces directos, sensores a 3,3 V, módulos con disparo compatible con 3,3 V. Sin optoacoplador ni convertidor de nivel (decisión del usuario): el SIS no lee nodos de 12 V; vuelven SIF-03 por pendiente y SIF-08 por "calentamiento sin efecto". Termostato bimetálico de 2 cables: opciones de cableado T1/T2 (A-11). Nuevas decisiones abiertas A-12 (módulo sensor de voltaje) y A-13 (modelos de placa). UART a 115200; persistencia del SIS en NVS; Task Watchdog; radios apagadas. Pinouts nuevos por controlador |
+| 2026-10-06 | 6 | **Control y SIS en un ESP32 DevKit V1 cada uno** (decisión del usuario; cierra A-13). Pinout nuevo del control ([pinout/control-esp32.md](pinout/control-esp32.md)): mismos pines que el SIS para puerta, salidas, SPI y UART; HMI por UART1 en GPIO4/GPIO35; consola por UART0 (ya no hay USB nativo). Primera versión del código de los tres nodos y del protocolo. Los parámetros viven en `lib/*_logic/*_params.h` (la lógica pura los necesita) y los pines en `include/*_pins.h`. El SIS trata una lectura 0x0000 del MAX6675 como inválida (módulo sin alimentar o SO en corto) |
+| 2026-10-06 | 7 | **Firmware reescrito por decisión del usuario: toda la lógica en tareas de FreeRTOS y muy pocos archivos**, priorizando la legibilidad (un `main.cpp` y un `config.h` por nodo; protocolo en un solo `compartido/qs_protocol.h`). Se retiran la separación `lib/` + `src/`, las pruebas `native`, el simulador del HMI y la compilación `QS_TEST_BUILD`. SIF-08 pasa a evaluarse en ventanas consecutivas de 60 s. `REQ_ACK` ya no lleva payload. Los códigos de falla 3, 4, 11 y 12 dejan de enviarse (los avisos de sensores van en `warn_flags`; el tope de ciclo y la pérdida del HMI sólo se anotan en la consola) |

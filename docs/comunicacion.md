@@ -1,6 +1,6 @@
 # Comunicación entre nodos
 
-Resumen. El formato byte a byte de la trama y de cada mensaje está en [PLAN-MAESTRO §6](PLAN-MAESTRO.md#6-firmware-común). Contrato de código en `firmware/compartido/protocolo/` (única fuente de verdad, incluida por los tres firmwares).
+Resumen. El formato byte a byte de la trama y de cada mensaje está en [PLAN-MAESTRO §6](PLAN-MAESTRO.md#6-firmware-común). Contrato de código en `firmware/compartido/qs_protocol.h` (única fuente de verdad, incluido por los tres firmwares).
 
 ## Enlaces
 
@@ -8,8 +8,8 @@ Los tres controladores trabajan a 3,3 V: **cables directos**, sin convertidores.
 
 | Enlace | Puertos | Notas |
 |---|---|---|
-| Control ↔ SIS | ESP32-S3 UART1 (GPIO17 TX / GPIO18 RX) ↔ ESP32 Dev Kit UART2 (GPIO16 RX / GPIO17 TX) | La depuración de cada placa va por su USB |
-| Control ↔ HMI | ESP32-S3 UART2 (GPIO15 TX / GPIO16 RX) ↔ HMI UART2 reasignado a IO32 (RX) / IO25 (TX), en el conector I2C de la placa | UART0 del HMI queda libre para depurar por USB |
+| Control ↔ SIS | Control UART2 (GPIO17 TX / GPIO16 RX) ↔ SIS UART2 (GPIO16 RX / GPIO17 TX), cruzados | La depuración de cada placa va por su USB |
+| Control ↔ HMI | Control UART1 reasignado (GPIO4 TX / GPIO35 RX) ↔ HMI UART2 reasignado a IO32 (RX) / IO25 (TX), en el conector I2C de la placa | UART0 del HMI queda libre para depurar por USB |
 
 Velocidad: **115200 8N1** en ambos enlaces. GND común entre los tres nodos. El HMI no habla con el SIS. Pines exactos: [pinout/](pinout/README.md).
 

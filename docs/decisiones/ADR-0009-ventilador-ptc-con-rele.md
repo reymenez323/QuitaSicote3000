@@ -3,7 +3,7 @@
 **Estado:** Aceptada. Implementación con módulos según la [ADR-0013](ADR-0013-solo-modulos-y-dispositivos.md).
 
 ## Contexto
-El ventilador del PTC (FAN_P) se conmuta con un módulo de relé. Eso permite que quede apagado con el PTC caliente, una de las causas principales de sobrecalentamiento. Por la ADR-0012, encender y apagar el ventilador es **control (ESP32-S3)** y vetar su apagado es **seguridad (ESP32 Dev Kit)**.
+El ventilador del PTC (FAN_P) se conmuta con un módulo de relé. Eso permite que quede apagado con el PTC caliente, una de las causas principales de sobrecalentamiento. Por la ADR-0012, encender y apagar el ventilador es **control (ESP32 DevKit V1 de control)** y vetar su apagado es **seguridad (ESP32 Dev Kit)**.
 
 ## Decisión
 - FAN_P se alimenta a través de **dos contactos NC en paralelo**:
