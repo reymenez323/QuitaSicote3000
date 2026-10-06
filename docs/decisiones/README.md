@@ -10,7 +10,7 @@
 | [ADR-0001](ADR-0001-separacion-control-sis.md) | Control y SIS en MCU independientes | Aceptada |
 | [ADR-0002](ADR-0002-mcu-del-sis.md) | Control en ESP32 DevKit V1 de control, SIS en ESP32 Dev Kit (antes Mega y Nano) | Aceptada |
 | ADR-0003 | (Retirada; reemplazada por la ADR-0010) | — |
-| [ADR-0004](ADR-0004-asignacion-termopares.md) | TC1/TC2 al control, TC3 exclusivo del SIS | Propuesta |
+| [ADR-0004](ADR-0004-asignacion-termopares.md) | TC1/TC2 al control, el SIS sin termopar | Aceptada |
 | [ADR-0005](ADR-0005-hmi-esp32.md) | Pantalla ESP32-32E como nodo HMI sólo de comunicación | Aceptada |
 | [ADR-0006](ADR-0006-producto-domestico-sin-paro-fisico.md) | Producto doméstico, sin paro físico | Aceptada |
 | [ADR-0007](ADR-0007-perfiles-en-el-control.md) | Perfiles en el control; SIS con límite único | Propuesta |

@@ -22,7 +22,6 @@ firmware/
 | Nodo | Tarea | Periodo | Qué hace |
 |---|---|---|---|
 | SIS | `taskSafety` | 10 ms | Puerta → funciones de seguridad → relés RL1, RL3, RL4. Vigilada por el watchdog (1 s) |
-| SIS | `taskThermocouple` | 250 ms | Lee TC3 y comprueba que sea creíble |
 | SIS | `taskLink` | 10 ms | Habla con el control; guarda en memoria no volátil |
 | Control | `taskCycle` | 10 ms | Puerta → máquina de estados → SSR1 y ventiladores. Vigilada por el watchdog (2 s) |
 | Control | `taskSensors` | 250 ms | TC1 y TC2 alternados; cada segundo, humedad y olor |

@@ -64,7 +64,6 @@ struct SisInfo {
   uint32_t bootSinceMs = 0;     // desde cuándo dice estar arrancando
   SisState state = SisState::Boot;
   uint16_t tripMask = 0;
-  int16_t tc3Q2 = TEMP_INVALID;
   uint8_t ioFlags = 0;
   uint8_t thermalEvents = 0;
 } sis;
@@ -539,7 +538,6 @@ void handleSisFrame(const Frame& frame) {
     sis.lastHeartbeatMs = now;
     sis.state = newState;
     sis.tripMask = heartbeat.trip_mask;
-    sis.tc3Q2 = heartbeat.tc3_q2;
     sis.ioFlags = heartbeat.io_flags;
     sis.thermalEvents = heartbeat.thermal_events;
   } else if (frame.type == MSG_EVENT) {
@@ -732,7 +730,7 @@ String tenths(bool valid, int value) {
 
 // Una línea CSV por segundo, con estas columnas:
 const char CSV_HEADER[] =
-    "t_ms,state,sp,tc1,tc2,tc3,rh,voc,ssr1,permit,fan_c,fan_p_off,door,sis_state,trip_mask,fault";
+    "t_ms,state,sp,tc1,tc2,rh,voc,ssr1,permit,fan_c,fan_p_off,door,sis_state,trip_mask,fault";
 
 void printCsvLine() {
   char line[160];
@@ -741,15 +739,13 @@ void printCsvLine() {
     // para que un puerto USB lento nunca frene a las demás tareas.
     Lock lock;
     const uint32_t now = millis();
-    const bool tc3Known = sisAlive(now) && sis.tc3Q2 != TEMP_INVALID;
 
-    snprintf(line, sizeof(line), "%lu,%u,%s,%s,%s,%s,%s,%s,%d,%d,%d,%d,%u,%u,0x%04X,%u",
+    snprintf(line, sizeof(line), "%lu,%u,%s,%s,%s,%s,%s,%d,%d,%d,%d,%u,%u,0x%04X,%u",
              static_cast<unsigned long>(now),
              static_cast<unsigned>(cycle.state),
              tenths(cycleInProgress(), cycle.setpointX10).c_str(),
              tenths(readings.tc1Valid, readings.tc1X10).c_str(),
              tenths(readings.tc2Valid, readings.tc2X10).c_str(),
-             tenths(tc3Known, sis.tc3Q2 * 10 / 4).c_str(),
              tenths(readings.humidityValid, readings.humidityX10).c_str(),
              readings.vocValid ? String(readings.vocIndex).c_str() : "",
              ssr1On, sisGivesPermit(now), fanCOn, fanPOffRequest,

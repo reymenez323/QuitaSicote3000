@@ -79,17 +79,14 @@ enum FaultCode : uint8_t {
 
 // Causas de disparo del SIS (bits de trip_mask)
 enum TripBit : uint16_t {
-  TRIP_OVERTEMP = 1u << 0,         // SIF-01: TC3 por encima del límite
-  TRIP_FAST_RISE = 1u << 2,        // SIF-03: TC3 sube demasiado rápido (sin flujo de aire)
-  TRIP_SENSOR = 1u << 3,           // SIF-04: TC3 inválido
+  // Bits 0, 2, 3 y 7 (SIF-01, 03, 04 y 08) estaban ligados al TC3, que ya no existe: no reutilizar.
   TRIP_HEARTBEAT = 1u << 5,        // SIF-06: el control dejó de hablar mientras calentaba
   TRIP_MAX_HEAT_TIME = 1u << 6,    // SIF-07: demasiado tiempo calentando
-  TRIP_NO_EFFECT = 1u << 7,        // SIF-08: se calienta pero TC3 baja (termostato abierto)
   TRIP_MEMORY_INVALID = 1u << 11,  // los datos guardados están corruptos
   TRIP_FROM_MEMORY = 1u << 15,     // el disparo viene de antes de un corte de energía
 };
 // Los "eventos térmicos" se cuentan y se guardan: al segundo, el SIS se bloquea.
-constexpr uint16_t TRIP_THERMAL_MASK = TRIP_OVERTEMP | TRIP_FAST_RISE | TRIP_NO_EFFECT;
+constexpr uint16_t TRIP_THERMAL_MASK = TRIP_MAX_HEAT_TIME;
 
 // Bits de HbCtrl.ctrl_flags (informativos: el SIS sólo los usa para restringir)
 enum CtrlFlag : uint8_t {
@@ -178,7 +175,6 @@ struct QS_PACKED HbSis {
   uint8_t proto_ver;
   uint8_t sis_state;       // SisState
   uint16_t trip_mask;      // TripBit
-  int16_t tc3_q2;          // TC3 en cuartos de grado (68 °C = 272)
   uint8_t io_flags;        // SisIoFlag
   uint8_t thermal_events;  // eventos térmicos guardados
   uint8_t reserved;
@@ -239,7 +235,7 @@ struct QS_PACKED Status {
   uint16_t reserved;
 };
 
-static_assert(sizeof(HbSis) == 9, "HB_SIS debe medir 9 bytes");
+static_assert(sizeof(HbSis) == 7, "HB_SIS debe medir 7 bytes");
 static_assert(sizeof(Status) == 28, "STATUS debe medir 28 bytes");
 
 // -----------------------------------------------------------------------------
