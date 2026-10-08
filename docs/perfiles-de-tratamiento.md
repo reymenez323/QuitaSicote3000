@@ -31,4 +31,4 @@ Duración del tratamiento:
 
 | Corta | Media | Larga | Tope global |
 |---|---|---|---|
-| 20 min | 40 min | 70 min | 120 min |
+| 5 min | 10 min | 25 min | 120 min |

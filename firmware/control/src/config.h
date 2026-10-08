@@ -50,7 +50,7 @@ constexpr int16_t SETPOINT_C[4][3] = {
 };
 
 // Duración del tratamiento a temperatura, en minutos:  Corta  Media  Larga
-constexpr uint32_t DURATION_MIN[3] = {20, 40, 70};
+constexpr uint32_t DURATION_MIN[3] = {5, 10, 25};
 
 // ----------------------------- Regulación de temperatura ---------------------
 // Etapa 1: histéresis sobre TC1. Las temperaturas van en décimas de grado (x10).

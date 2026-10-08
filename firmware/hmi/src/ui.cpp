@@ -27,6 +27,9 @@ using namespace qs;
 const char* const TXT_APP = "QuitaSicote 3000";
 const char* const TXT_BOOTING = "Iniciando...";
 const char* const TXT_NO_LINK = "Sin comunicacion con el controlador";
+const char* const TXT_NO_LINK_SHORT = "Sin conexion";
+const char* const TXT_NO_LINK_HINT = "Puedes elegir, pero no iniciar";
+const char* const TXT_SEND_FAILED = "No se pudo enviar: sin conexion con el controlador";
 
 const char* const TXT_DOOR_CLOSED = "Puerta cerrada";
 const char* const TXT_DOOR_OPEN = "Puerta abierta";
@@ -41,6 +44,10 @@ const char* const TXT_CONFIRM = "Confirmar";
 const char* const SHOE_NAMES[SHOE_COUNT] = {"Cuero", "Deportivo", "Bota", "Sintetico"};
 const char* const INTENSITY_NAMES[INTENSITY_COUNT] = {"Suave", "Media", "Intensa"};
 const char* const DURATION_NAMES[DURATION_COUNT] = {"Corta", "Media", "Larga"};
+// Tiempo de cada duración, sólo para mostrarlo. Debe coincidir con DURATION_MIN de
+// control/src/config.h (el control es quien manda; el HMI nunca envía minutos).
+const char* const DURATION_BUTTONS[DURATION_COUNT] = {"Corta\n5 min", "Media\n10 min", "Larga\n25 min"};
+const char* const DURATION_SUMMARY[DURATION_COUNT] = {"Corta (5 min)", "Media (10 min)", "Larga (25 min)"};
 
 const char* const TXT_START = "INICIAR";
 const char* const TXT_CLOSE_DOOR = "Cierra la puerta";
@@ -149,6 +156,8 @@ static int chosenIntensity = -1;
 static int chosenDuration = -1;
 static uint16_t shownDetail = 0;          // código de falla o causa con que se dibujó la pantalla
 static lv_obj_t* dialog = nullptr;
+static lv_obj_t* linkDot = nullptr;       // punto de conexion, arriba a la derecha
+static bool linkIsOk = false;             // ultimo estado del enlace recibido en uiUpdate()
 
 // Elementos de la pantalla actual cuyo texto cambia mientras se muestra.
 static lv_obj_t* titleLabel = nullptr;
@@ -275,6 +284,18 @@ static void closeDialog() {
 
 static void onDialogNo(lv_event_t*) { closeDialog(); }
 
+// Aviso con un solo botón (por ejemplo, un error al enviar una solicitud).
+static void openMessage(const char* message) {
+  closeDialog();
+  dialog = addPanel(lv_layer_top(), 0, 0, 320, 240, LV_COLOR_MAKE(0, 0, 0));
+  lv_obj_set_style_bg_opa(dialog, LV_OPA_50, 0);
+
+  lv_obj_t* box = addPanel(dialog, 16, 32, 288, 176, COLOR_BACKGROUND);
+  lv_obj_set_style_radius(box, 8, 0);
+  addLabel(box, message, FONT_BODY, COLOR_DANGER, 12, 16, 264, LV_TEXT_ALIGN_CENTER);
+  addButton(box, TXT_ACCEPT, 8, 104, 272, 64, COLOR_NEUTRAL, onDialogNo);
+}
+
 // Diálogo de confirmación, sólo para acciones con consecuencias (cancelar, rearmar).
 static void openDialog(const char* question, const char* yesText, lv_event_cb_t onYes) {
   closeDialog();
@@ -317,20 +338,29 @@ static void onDurationChosen(lv_event_t* event) {
   wizardStep = Screen::Summary;
 }
 
-static void onStart(lv_event_t*) { requestStart(chosenShoe, chosenIntensity, chosenDuration); }
-static void onPause(lv_event_t*) { requestAction(MSG_REQ_PAUSE); }
-static void onResume(lv_event_t*) { requestAction(MSG_REQ_RESUME); }
-static void onAccept(lv_event_t*) { requestAction(MSG_REQ_ACK); }
+// Sin enlace la solicitud no llegaría al control: se avisa en vez de encolarla.
+static bool sendIfLinked() {
+  if (linkIsOk) return true;
+  openMessage(TXT_SEND_FAILED);
+  return false;
+}
+
+static void onStart(lv_event_t*) {
+  if (sendIfLinked()) requestStart(chosenShoe, chosenIntensity, chosenDuration);
+}
+static void onPause(lv_event_t*) { if (sendIfLinked()) requestAction(MSG_REQ_PAUSE); }
+static void onResume(lv_event_t*) { if (sendIfLinked()) requestAction(MSG_REQ_RESUME); }
+static void onAccept(lv_event_t*) { if (sendIfLinked()) requestAction(MSG_REQ_ACK); }
 
 static void onCancelConfirmed(lv_event_t*) {
-  requestAction(MSG_REQ_CANCEL);
-  closeDialog();
+  if (sendIfLinked()) requestAction(MSG_REQ_CANCEL);
+  if (linkIsOk) closeDialog();
 }
 static void onCancel(lv_event_t*) { openDialog(TXT_CANCEL_QUESTION, TXT_YES_CANCEL, onCancelConfirmed); }
 
 static void onRearmConfirmed(lv_event_t*) {
-  requestAction(MSG_REQ_REARM);
-  closeDialog();
+  if (sendIfLinked()) requestAction(MSG_REQ_REARM);
+  if (linkIsOk) closeDialog();
 }
 static void onRearm(lv_event_t*) { openDialog(TXT_REARM_QUESTION, TXT_YES_REARM, onRearmConfirmed); }
 
@@ -350,7 +380,7 @@ static void buildHome(lv_obj_t* screen) {
   lv_obj_t* card = addPanel(screen, MARGIN, CONTENT_Y, CONTENT_W, 56, COLOR_SURFACE);
   lv_obj_set_style_radius(card, 8, 0);
   line1Label = addLabel(card, "", FONT_BODY, COLOR_TEXT, 10, 4);
-  addLabel(card, TXT_READY, FONT_BODY, COLOR_TEXT_SOFT, 10, 28);
+  line2Label = addLabel(card, "", FONT_BODY, COLOR_TEXT_SOFT, 10, 28);
   addButton(screen, TXT_BEGIN, MARGIN, 132, CONTENT_W, 100, COLOR_PRIMARY, onBegin, 0, FONT_BIG);
 }
 
@@ -384,7 +414,7 @@ static void buildSummary(lv_obj_t* screen) {
   addHeader(screen, TXT_CONFIRM, true);
   const char* names[3] = {TXT_SHOE, TXT_INTENSITY, TXT_DURATION};
   const char* values[3] = {SHOE_NAMES[chosenShoe], INTENSITY_NAMES[chosenIntensity],
-                           DURATION_NAMES[chosenDuration]};
+                           DURATION_SUMMARY[chosenDuration]};
   for (int row = 0; row < 3; row++) {
     const int y = CONTENT_Y + row * 30;
     addLabel(screen, names[row], FONT_BODY, COLOR_TEXT_SOFT, MARGIN, y);
@@ -466,7 +496,8 @@ static void buildTrip(lv_obj_t* screen, uint16_t tripMask) {
 
 // Qué pantalla corresponde a lo que informa el control.
 static Screen screenFor(const UiModel& model) {
-  if (!model.linkOk) return Screen::NoLink;
+  // Sin enlace la interfaz sigue completa (asistente incluido); sólo INICIAR avisa del error.
+  if (!model.linkOk) return wizardStep;
 
   const Status& status = model.status;
   switch (static_cast<CycleState>(status.cycle_state)) {
@@ -508,7 +539,7 @@ static void showScreen(Screen screen, const Status& status) {
     case Screen::Home:      buildHome(fresh); break;
     case Screen::Shoe:      buildShoe(fresh); break;
     case Screen::Intensity: buildThreeOptions(fresh, TXT_INTENSITY, INTENSITY_NAMES, onIntensityChosen, chosenIntensity); break;
-    case Screen::Duration:  buildThreeOptions(fresh, TXT_DURATION, DURATION_NAMES, onDurationChosen, chosenDuration); break;
+    case Screen::Duration:  buildThreeOptions(fresh, TXT_DURATION, DURATION_BUTTONS, onDurationChosen, chosenDuration); break;
     case Screen::Summary:   buildSummary(fresh); break;
     case Screen::Running:   buildRunning(fresh); break;
     case Screen::Paused:    buildPaused(fresh); break;
@@ -536,11 +567,18 @@ static void refreshTexts(const UiModel& model) {
 
   switch (currentScreen) {
     case Screen::Home:
-      setText(line1Label, doorClosed ? TXT_DOOR_CLOSED : doorOpen ? TXT_DOOR_OPEN : TXT_DOOR_INVALID);
+      if (!model.linkOk) {
+        setText(line1Label, TXT_NO_LINK_SHORT);
+        setText(line2Label, TXT_NO_LINK_HINT);
+      } else {
+        setText(line1Label, doorClosed ? TXT_DOOR_CLOSED : doorOpen ? TXT_DOOR_OPEN : TXT_DOOR_INVALID);
+        setText(line2Label, TXT_READY);
+      }
       break;
 
     case Screen::Summary:
-      showDoorButton(doorClosed, TXT_START);
+      // Sin enlace no se conoce la puerta: el botón queda activo y el aviso explica el error.
+      showDoorButton(doorClosed || !model.linkOk, TXT_START);
       if (model.startRejected) setText(titleLabel, TXT_START_REJECTED);
       break;
 
@@ -584,14 +622,30 @@ static void refreshTexts(const UiModel& model) {
 }
 
 void uiBegin() {
+  // Punto de conexión: vive en la capa superior, así se ve en todas las pantallas.
+  linkDot = lv_obj_create(lv_layer_top());
+  lv_obj_remove_flag(linkDot, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_remove_flag(linkDot, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_size(linkDot, 20, 20);
+  lv_obj_set_pos(linkDot, 320 - MARGIN - 20, MARGIN);
+  lv_obj_set_style_radius(linkDot, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_border_width(linkDot, 2, 0);
+  lv_obj_set_style_border_color(linkDot, COLOR_WHITE, 0);  // se distingue también sobre la cabecera roja
+  lv_obj_set_style_bg_color(linkDot, COLOR_DANGER, 0);
+  lv_obj_set_style_bg_opa(linkDot, LV_OPA_COVER, 0);
+
   UiModel nothingYet;
   showScreen(Screen::Boot, nothingYet.status);
 }
 
 void uiUpdate(const UiModel& model) {
+  linkIsOk = model.linkOk;
+  lv_obj_set_style_bg_color(linkDot, linkIsOk ? COLOR_GO : COLOR_DANGER, 0);
+
   // El asistente es estado local del HMI y sólo vive mientras el control está en LISTO.
-  const bool ready = model.linkOk && model.status.cycle_state == static_cast<uint8_t>(CycleState::Ready);
-  if (!ready) {
+  // Sin enlace se conserva lo elegido: el asistente sigue disponible.
+  const bool ready = model.status.cycle_state == static_cast<uint8_t>(CycleState::Ready);
+  if (model.linkOk && !ready) {
     wizardStep = Screen::Home;
     chosenShoe = chosenIntensity = chosenDuration = -1;
   }

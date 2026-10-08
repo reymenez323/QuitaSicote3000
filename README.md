@@ -6,6 +6,8 @@ Repositorio: https://github.com/reymenez323/QuitaSicote3000
 
 **Empieza por [docs/PLAN-MAESTRO.md](docs/PLAN-MAESTRO.md)**: plan completo de electrónica y firmware.
 
+**¿Vas a armar el equipo?** Sigue la [guía de conexión paso a paso](docs/guia-de-conexion/README.md) (incluye el diagrama de Fritzing en alta resolución).
+
 > **Regla de máxima prioridad**: el **control** es el **ESP32 DevKit V1 de control** y el **SIS** es el **ESP32 Dev Kit**, estrictamente en todo el proyecto ([ADR-0012](docs/decisiones/ADR-0012-regla-mega-control-nano-sis.md)).
 > **Hardware**: sólo módulos y dispositivos; sin optoacopladores, convertidores de nivel ni fusibles ([ADR-0013](docs/decisiones/ADR-0013-solo-modulos-y-dispositivos.md)).
 
@@ -26,6 +28,7 @@ QuitaSicote3000/
 ├─ docs/
 │  ├─ PLAN-MAESTRO.md            Plan completo de implementación (electrónica + firmware). Empieza aquí
 │  ├─ pinout/                    Pinout de cada controlador: control-esp32.md, sis-esp32.md, esp32-hmi.md
+│  ├─ guia-de-conexion/          Guía paso a paso para conectar todo (con el diagrama de Fritzing por zonas)
 │  ├─ requisitos.md              Qué debe hacer el sistema y parámetros provisionales
 │  ├─ arquitectura.md            Nodos, reparto de responsabilidades, principios
 │  ├─ maquina-de-estados.md      Ciclo de tratamiento (control)
@@ -33,6 +36,8 @@ QuitaSicote3000/
 │  ├─ comunicacion.md            Enlaces UART y mensajes
 │  ├─ seguridad-sis.md           Funciones de seguridad y su validación
 │  └─ decisiones/                ADRs y decisiones abiertas
+├─ hardware/
+│  └─ fritzing/                  Diagrama de conexiones (.fzz editable y PNG de alta resolución)
 └─ firmware/
    ├─ control/                   Proyecto PlatformIO del ESP32 DevKit V1 de control
    ├─ sis/                       Proyecto PlatformIO del ESP32 Dev Kit

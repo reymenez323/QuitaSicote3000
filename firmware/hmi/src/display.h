@@ -55,7 +55,7 @@ class Display : public lgfx::LGFX_Device {
     panel.pin_rst = -1;  // el reset de la pantalla va unido al del ESP32
     panel.panel_width = 240;
     panel.panel_height = 320;
-    panel.invert = false;
+    panel.invert = true;
     panel.rgb_order = false;
     panel.bus_shared = true;  // el táctil usa el mismo bus
     panel_.config(panel);
