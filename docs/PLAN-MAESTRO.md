@@ -663,7 +663,7 @@ Reglas generales:
 | 2 Bota | 40 | 45 | 50 |
 | 3 Sintético | 38 | 42 | 48 |
 
-Duración del tratamiento: Corta 20 min, Media 40 min, Larga 70 min. Tope global de ciclo: 120 min.
+Duración del tratamiento: Corta 5 min, Media 10 min, Larga 25 min. Tope global de ciclo: 120 min.
 
 ### 8.6 Control de temperatura y actuadores
 - **Etapa 1 (F5)**: histéresis sobre TC1 (encender si < setpoint − 0,5 °C; apagar si > setpoint + 0,5 °C) con un mínimo de 5 s encendido o apagado.
